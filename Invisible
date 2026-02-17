@@ -1,0 +1,127 @@
+-- Blox Fruits INVISIBLE v19 – CAMERA OFFSET + TELEPORT TO CAMERA LOOK
+-- INVISIBLE → +15k Y + camera offset down (see ground perfectly)
+-- VISIBLE → TELEPORT where camera LOOKS (raycast to ground)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+local isHidden = false
+local UP_OFFSET = 15000
+local DOWN_OFFSET = 14500
+local cameraConn = nil
+
+-- Tiny GUI
+local sg = Instance.new("ScreenGui")
+sg.Name = "InvisibleTeleportV19"
+sg.ResetOnSpawn = false
+
+pcall(function() sg.Parent = player:WaitForChild("PlayerGui") end)
+if sg.Parent ~= player:WaitForChild("PlayerGui") then
+    sg.Parent = game:GetService("CoreGui")
+end
+
+local f = Instance.new("Frame", sg)
+f.Size = UDim2.new(0, 130, 0, 60)
+f.Position = UDim2.new(0.5, -65, 0.05, 0)
+f.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+f.Active = true
+f.Draggable = true
+
+local corner = Instance.new("UICorner", f)
+corner.CornerRadius = UDim.new(0, 10)
+
+local btn = Instance.new("TextButton", f)
+btn.Size = UDim2.new(0.9, 0, 0.8, 0)
+btn.Position = UDim2.new(0.05, 0, 0.1, 0)
+btn.BackgroundColor3 = Color3.fromRGB(60, 180, 60)
+btn.Text = "INVISIBLE"
+btn.TextColor3 = Color3.new(1,1,1)
+btn.Font = Enum.Font.GothamBold
+btn.TextScaled = true
+
+local btnCorner = Instance.new("UICorner", btn)
+btnCorner.CornerRadius = UDim.new(0, 8)
+
+btn.MouseButton1Click:Connect(function()
+    local char = player.Character
+    if not char then return end
+    
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    isHidden = not isHidden
+    
+    if isHidden then
+        -- CHARACTER GOES UP + CAMERA OFFSET DOWN
+        local currentPos = hrp.Position
+        hrp.CFrame = CFrame.new(currentPos.X, currentPos.Y + UP_OFFSET, currentPos.Z)
+        
+        -- CAMERA OFFSET (see ground perfectly)
+        cameraConn = RunService.RenderStepped:Connect(function()
+            if isHidden then
+                local camPos = camera.CFrame.Position
+                local camLook = camera.CFrame.LookVector
+                
+                -- Keep camera low to see ground
+                local lowCamPos = Vector3.new(camPos.X, currentPos.Y + 20, camPos.Z)
+                camera.CFrame = CFrame.new(lowCamPos, lowCamPos + camLook)
+            end
+        end)
+        
+        btn.Text = "VISIBLE"
+        btn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+        
+    else
+        -- STOP CAMERA OFFSET
+        if cameraConn then
+            cameraConn:Disconnect()
+            cameraConn = nil
+        end
+        
+        -- TELEPORT TO WHERE CAMERA IS LOOKING
+        local rayParams = RaycastParams.new()
+        rayParams.FilterDescendantsInstances = {char}
+        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+        
+        local rayResult = workspace:Raycast(
+            camera.CFrame.Position, 
+            camera.CFrame.LookVector * 2000, 
+            rayParams
+        )
+        
+        local targetPos
+        if rayResult then
+            -- Land 5 studs above hit surface
+            targetPos = rayResult.Position + Vector3.new(0, 5, 0)
+        else
+            -- Fallback: 300 studs forward from camera at ground level
+            targetPos = camera.CFrame.Position + camera.CFrame.LookVector * 300
+            targetPos = Vector3.new(targetPos.X, 15, targetPos.Z)
+        end
+        
+        -- TELEPORT!
+        hrp.CFrame = CFrame.new(targetPos)
+        
+        -- Gentle landing
+        task.spawn(function()
+            task.wait(0.1)
+            hrp.Velocity = Vector3.new(0, -30, 0)
+        end)
+        
+        btn.Text = "INVISIBLE"
+        btn.BackgroundColor3 = Color3.fromRGB(60, 180, 60)
+    end
+end)
+
+-- RightShift toggle GUI
+UserInputService.InputBegan:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        sg.Enabled = not sg.Enabled
+    end
+end)
+
+print("🎯 Invisible v19 LOADED!")
+print("Camera offset + TELEPORT WHERE YOU LOOK!")
