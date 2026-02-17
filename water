@@ -1,0 +1,16 @@
+-- Blox Fruits - Delete WaterBase-Plane (instant execution)
+-- Deletes workspace.Map["WaterBase-Plane"] and all its children
+
+local map = workspace:FindFirstChild("Map")
+if not map then
+    warn("Map folder not found in workspace!")
+    return
+end
+
+local waterBasePlane = map:FindFirstChild("WaterBase-Plane")
+if waterBasePlane then
+    waterBasePlane:Destroy()
+    print("✅ WaterBase-Plane successfully deleted!")
+else
+    warn("❌ WaterBase-Plane not found in workspace.Map!")
+end
