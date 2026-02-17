@@ -1,0 +1,119 @@
+-- Blox Fruits Mini CAFE TP (Tiny GUI)
+-- Teleports to Vector3.new(2286, 16, 909)
+-- Labeled "CAFE" - Very small, draggable. CoreGui = always visible.
+-- Path: workspace.Characters.GENOCRY.HumanoidRootPart
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+
+local LP = Players.LocalPlayer
+
+local TARGET_POS = Vector3.new(2286, 16, 909)
+local TARGET_CFRAME = CFrame.new(TARGET_POS)
+
+-- Get Root
+local function getRoot()
+    return workspace.Characters:WaitForChild("GENOCRY", 10):WaitForChild("HumanoidRootPart", 10)
+end
+
+-- Quick TP
+local function quickTP()
+    local root = getRoot()
+    if not root then return end
+
+    local humanoid = root.Parent:FindFirstChild("Humanoid")
+    if humanoid then humanoid.PlatformStand = true end
+
+    local bp = Instance.new("BodyPosition")
+    bp.MaxForce = Vector3.new(4000, 4000, 4000)
+    bp.P = 30000
+    bp.Position = TARGET_POS
+    bp.Parent = root
+
+    local conn = RunService.Heartbeat:Connect(function()
+        root.CFrame = TARGET_CFRAME * root.CFrame.Rotation
+    end)
+
+    wait(0.8)
+    conn:Disconnect()
+    bp:Destroy()
+    if humanoid then humanoid.PlatformStand = false end
+end
+
+-- =============== TINY CAFE GUI (CoreGui) ===============
+local function CreateMiniGUI()
+    if CoreGui:FindFirstChild("CafeTP") then
+        CoreGui.CafeTP:Destroy()
+    end
+
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "CafeTP"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.Parent = CoreGui
+
+    local Button = Instance.new("TextButton")
+    Button.Size = UDim2.new(0, 100, 0, 35)
+    Button.Position = UDim2.new(0, 20, 0.5, -17.5)  -- Left side, middle
+    Button.BackgroundColor3 = Color3.fromRGB(139, 69, 19)  -- Cafe brown
+    Button.Text = "CAFE TP"
+    Button.TextColor3 = Color3.new(1,1,1)
+    Button.Font = Enum.Font.GothamBold
+    Button.TextSize = 14
+    Button.Parent = ScreenGui
+
+    local Corner = Instance.new("UICorner")
+    Corner.CornerRadius = UDim.new(0, 8)
+    Corner.Parent = Button
+
+    -- Hover
+    Button.MouseEnter:Connect(function()
+        Button.BackgroundColor3 = Color3.fromRGB(160, 82, 45)
+    end)
+    Button.MouseLeave:Connect(function()
+        Button.BackgroundColor3 = Color3.fromRGB(139, 69, 19)
+    end)
+
+    -- Click
+    Button.MouseButton1Click:Connect(function()
+        Button.Text = "CAFE..."
+        quickTP()
+        wait(1)
+        Button.Text = "CAFE TP"
+    end)
+
+    -- Draggable
+    local dragging = false
+    local dragStart, startPos
+    Button.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = Button.Position
+        end
+    end)
+    Button.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement and dragging then
+            local delta = input.Position - dragStart
+            Button.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+end
+
+-- Load + Auto-recreate
+spawn(function()
+    CreateMiniGUI()
+    while wait(3) do
+        if not CoreGui:FindFirstChild("CafeTP") then
+            CreateMiniGUI()
+        end
+    end
+end)
+
+print("Cafe TP GUI loaded! Small brown 'CAFE TP' button on left → click to teleport!")
