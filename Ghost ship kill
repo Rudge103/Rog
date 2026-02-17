@@ -1,0 +1,237 @@
+-- Blox Fruits Position Changer + Model Deleter (CoreGui GUI)
+-- Sets position to Vector3.new(921, 251, 32883)
+-- Deletes: GhostShipInterior:GetChildren()[22], LavaParts, GetChildren()[12]
+-- NOW ACTIVATED BY PRESSING THE "6" KEY (on keyboard)
+-- Path: workspace.Characters.GENOCRY.HumanoidRootPart
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+
+local LP = Players.LocalPlayer
+
+local TARGET_POS = Vector3.new(921, 251, 32883)
+local TARGET_CFRAME = CFrame.new(TARGET_POS)
+
+-- Get Root
+local function getRoot()
+    return workspace.Characters:WaitForChild("GENOCRY", 15):WaitForChild("HumanoidRootPart", 15)
+end
+
+-- NoClip
+local NoClipConn
+local function setNoClip(enabled)
+    if NoClipConn then NoClipConn:Disconnect() end
+    local char = workspace.Characters:FindFirstChild("GENOCRY")
+    if not char or not enabled then return end
+    NoClipConn = RunService.Stepped:Connect(function()
+        for _, v in pairs(char:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.CanCollide = false
+            end
+        end
+    end)
+end
+
+-- Delete Specific Models
+local function deleteModels()
+    local success = true
+    local interior = workspace.Map:FindFirstChild("GhostShipInterior")
+    if not interior then
+        warn("GhostShipInterior not found!")
+        return false
+    end
+    
+    local children22 = interior:GetChildren()[22]
+    if children22 then
+        children22:Destroy()
+        print("Deleted GetChildren()[22]:", children22.Name)
+    else
+        print("GetChildren()[22] not found")
+        success = false
+    end
+    
+    local lavaParts = interior:FindFirstChild("LavaParts")
+    if lavaParts then
+        lavaParts:Destroy()
+        print("Deleted LavaParts")
+    else
+        print("LavaParts not found")
+        success = false
+    end
+    
+    local children12 = interior:GetChildren()[12]
+    if children12 then
+        children12:Destroy()
+        print("Deleted GetChildren()[12]:", children12.Name)
+    else
+        print("GetChildren()[12] not found")
+        success = false
+    end
+    
+    return success
+end
+
+-- Position Change + Delete
+local function executeAction()
+    local deleteSuccess = deleteModels()
+    
+    local success, root = pcall(getRoot)
+    if not success or not root then
+        warn("GENOCRY not found!")
+        return false, deleteSuccess
+    end
+    
+    local humanoid = root.Parent:FindFirstChild("Humanoid")
+    print("Old Pos:", root.Position)
+    
+    setNoClip(true)
+    if humanoid then humanoid.PlatformStand = true end
+    
+    local bodyPos = Instance.new("BodyPosition")
+    bodyPos.MaxForce = Vector3.new(4000, 4000, 4000)
+    bodyPos.P = 30000
+    bodyPos.Position = TARGET_POS
+    bodyPos.Parent = root
+    
+    local spamConn = RunService.Heartbeat:Connect(function()
+        root.CFrame = TARGET_CFRAME * root.CFrame.Rotation
+    end)
+    
+    wait(1.2)
+    spamConn:Disconnect()
+    bodyPos:Destroy()
+    if humanoid then humanoid.PlatformStand = false end
+    setNoClip(false)
+    
+    local dist = (root.Position - TARGET_POS).Magnitude
+    print("New Pos:", root.Position, "Error:", dist)
+    local posSuccess = dist < 10
+    
+    return posSuccess, deleteSuccess
+end
+
+-- KEYBIND: Press "6" to activate
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.Six then  -- "6" key
+        print("6 pressed - Executing delete + teleport!")
+        spawn(executeAction)  -- Run in background so it doesn't freeze
+    end
+end)
+
+-- =============== GUI IN CoreGui (now just info - activation by key 6) ===============
+local function CreateGUI()
+    if CoreGui:FindFirstChild("PosDeleterGUI") then
+        CoreGui.PosDeleterGUI:Destroy()
+    end
+
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "PosDeleterGUI"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.Parent = CoreGui
+
+    local Frame = Instance.new("Frame")
+    Frame.Size = UDim2.new(0, 450, 0, 200)
+    Frame.Position = UDim2.new(0.5, -225, 0.5, -100)
+    Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    Frame.BorderSizePixel = 0
+    Frame.Active = true
+    Frame.Parent = ScreenGui
+
+    local UICorner = Instance.new("UICorner")
+    UICorner.CornerRadius = UDim.new(0, 15)
+    UICorner.Parent = Frame
+
+    -- Title
+    local Title = Instance.new("TextLabel")
+    Title.Size = UDim2.new(1, 0, 0, 35)
+    Title.Text = "Ghost Ship Bypass Tool"
+    Title.TextColor3 = Color3.new(1,1,1)
+    Title.BackgroundTransparency = 1
+    Title.Font = Enum.Font.GothamBold
+    Title.TextSize = 20
+    Title.Parent = Frame
+
+    -- Info
+    local Info = Instance.new("TextLabel")
+    Info.Size = UDim2.new(1, 0, 0, 60)
+    Info.Position = UDim2.new(0, 0, 0, 40)
+    Info.Text = "PRESS THE '6' KEY\n\nto instantly:\n• Delete blocking models\n• Teleport to 921, 251, 32883"
+    Info.TextColor3 = Color3.fromRGB(0, 255, 255)
+    Info.BackgroundTransparency = 1
+    Info.Font = Enum.Font.GothamBold
+    Info.TextSize = 18
+    Info.TextYAlignment = Enum.TextYAlignment.Top
+    Info.Parent = Frame
+
+    -- Current Pos
+    local PosLabel = Instance.new("TextLabel")
+    PosLabel.Size = UDim2.new(1, 0, 0, 25)
+    PosLabel.Position = UDim2.new(0, 0, 0, 110)
+    PosLabel.Text = "Current: Loading..."
+    PosLabel.TextColor3 = Color3.new(0,1,0)
+    PosLabel.BackgroundTransparency = 1
+    PosLabel.Font = Enum.Font.Gotham
+    PosLabel.TextSize = 14
+    PosLabel.TextXAlignment = Enum.TextXAlignment.Left
+    PosLabel.Parent = Frame
+
+    RunService.Heartbeat:Connect(function()
+        pcall(function()
+            local root = getRoot()
+            local p = root.Position
+            PosLabel.Text = string.format("Current: %.0f, %.0f, %.0f", p.X, p.Y, p.Z)
+        end)
+    end)
+
+    -- Status
+    local Status = Instance.new("TextLabel")
+    Status.Size = UDim2.new(1, 0, 0, 25)
+    Status.Position = UDim2.new(0, 0, 0, 140)
+    Status.Text = "Ready - Press 6 to activate!"
+    Status.TextColor3 = Color3.fromRGB(0, 255, 0)
+    Status.BackgroundTransparency = 1
+    Status.Font = Enum.Font.GothamBold
+    Status.TextSize = 16
+    Status.Parent = Frame
+
+    -- Draggable
+    local dragging = false
+    local dragInput, dragStart, startPos
+    Frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = Frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    Frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            Frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- Load GUI + Auto-recreate
+spawn(function()
+    CreateGUI()
+    while true do
+        wait(2)
+        if not CoreGui:FindFirstChild("PosDeleterGUI") then
+            pcall(CreateGUI)
+        end
+    end
+end)
+
+print("Ghost Ship Bypass Tool loaded!")
+print("PRESS THE '6' KEY to delete models + teleport to 921, 251, 32883")
