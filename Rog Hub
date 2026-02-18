@@ -1,0 +1,550 @@
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local CoreGui = gethui and gethui() or game:GetService("CoreGui")
+local LocalPlayer = Players.LocalPlayer
+
+local blur = Instance.new("BlurEffect")
+blur.Size = 0
+blur.Parent = Lighting
+TweenService:Create(blur, TweenInfo.new(0.25, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), { Size = 35 }):Play()
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "ROG ON TOP"
+gui.IgnoreGuiInset = true
+gui.ResetOnSpawn = false
+gui.Parent = CoreGui
+
+local root = Instance.new("Frame")
+root.Size = UDim2.new(1, 0, 1, 0)
+root.BackgroundTransparency = 1
+root.Parent = gui
+
+local bg = Instance.new("Frame")
+bg.Size = UDim2.new(1, 0, 1, 0)
+bg.BackgroundColor3 = Color3.fromRGB(15, 0, 25)
+bg.BackgroundTransparency = 1
+bg.ZIndex = 0
+bg.Parent = root
+TweenService:Create(bg, TweenInfo.new(0.25, Enum.EasingStyle.Sine), { BackgroundTransparency = 0.18 }):Play()
+
+local TITLE = "ROG ON TOP"
+local labels = {}
+local spacing = 48
+
+local function fadeOut()
+    for _, lbl in ipairs(labels) do
+        TweenService:Create(lbl, TweenInfo.new(0.2, Enum.EasingStyle.Sine), {
+            TextTransparency = 1,
+            TextStrokeTransparency = 1,
+            TextSize = 22
+        }):Play()
+    end
+    TweenService:Create(bg, TweenInfo.new(0.2), { BackgroundTransparency = 1 }):Play()
+    TweenService:Create(blur, TweenInfo.new(0.2), { Size = 0 }):Play()
+    task.wait(0.25)
+    gui:Destroy()
+    blur:Destroy()
+end
+
+for i = 1, #TITLE do
+    local char = TITLE:sub(i, i)
+    local lbl = Instance.new("TextLabel")
+    lbl.Text = char
+    lbl.Font = Enum.Font.GothamBlack
+    lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+    lbl.TextTransparency = 1
+    lbl.TextStrokeTransparency = 1
+    lbl.TextSize = 44
+    lbl.AnchorPoint = Vector2.new(0.5, 0.5)
+    lbl.Position = UDim2.new(0.5, (i - (#TITLE / 2 + 0.5)) * spacing, 0.5, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Parent = root
+
+    local grad = Instance.new("UIGradient")
+    grad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 110, 170)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
+    })
+    grad.Rotation = -45
+    grad.Parent = lbl
+
+    TweenService:Create(lbl, TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        TextTransparency = 0,
+        TextStrokeTransparency = 0.4,
+        TextSize = 68
+    }):Play()
+
+    TweenService:Create(lbl, TweenInfo.new(0.15, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+        TextSize = 54
+    }):Play()
+
+    table.insert(labels, lbl)
+    task.wait(0.09) -- VERY fast stagger
+end
+
+task.wait()
+fadeOut()
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "The Rog Vault",
+   LoadingTitle = "The Rog Vault",
+   LoadingSubtitle = "by Rog, ur favourite",
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = nil, -- Create a custom folder for your hub/game
+      FileName = "The Rog Vault"
+   },
+   Discord = {
+      Enabled = false,
+      Invite = "noinvitelink", -- The Discord invite code, do not include discord.gg/. E.g. discord.gg/ABCD would be ABCD
+      RememberJoins = true -- Set this to false to make them join the discord every time they load it up
+   },
+   KeySystem = false, -- Set this to true to use our key system
+   KeySettings = {
+      Title = "xxx",
+      Subtitle = "xxx",
+      Note = "xxx",
+      FileName = "xxx", -- It is recommended to use something unique as other scripts using Rayfield may overwrite your key file
+      SaveKey = false, -- The user's key will be saved, but if you change the key, they will be unable to use your script
+      GrabKeyFromSite = true, -- If this is true, set Key below to the RAW site you would like Rayfield to get the key from
+      Key = {"xxx"} -- List of keys that will be accepted by the system, can be RAW file links (pastebin, github etc) or simple strings ("hello","key22")
+   }
+})
+
+local MainTab = Window:CreateTab("Buddha", nil) -- Title, Image
+local MainSection = MainTab:CreateSection("Reset Character To Stop.")
+
+local Button = MainTab:CreateButton({
+   Name = "Big Boi Hitbox (sword only sorry lol)",
+   Callback = function()
+        -- Blox Fruits AUTO HUGE HITBOX + INVISIBLE WEAPON (NO GUI, Toggle on Re-Execute)
+-- Executes → starts 1000× scale + invisibility on sword/gun
+-- Execute again → stops everything
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+
+local SCALE = 1000
+local connection = nil
+
+-- Check if already running (toggle behavior)
+local existing = getgenv and getgenv().HugeHitboxRunning
+if existing then
+    -- Already running → stop it
+    if connection then connection:Disconnect() end
+    getgenv().HugeHitboxRunning = nil
+    print("Huge hitbox + invisible weapon STOPPED")
+    return
+end
+
+-- Mark as running
+getgenv().HugeHitboxRunning = true
+print("Huge hitbox + invisible weapon STARTED (1000×)")
+
+-- Apply function
+local function apply()
+    local chars = workspace:FindFirstChild("Characters")
+    if not chars then return end
+    
+    local char = chars:FindFirstChild(player.Name)
+    if not char then return end
+    
+    local weapon = char:FindFirstChild("EquippedWeapon")
+    if not weapon then return end
+    
+    local wType = weapon:GetAttribute("WeaponType") or ""
+    if wType ~= "Sword" and wType ~= "Gun" then return end
+    
+    -- Resize
+    for _, v in ipairs(weapon:GetDescendants()) do
+        if v:IsA("BasePart") or v:IsA("MeshPart") then
+            v.Size = v.Size * SCALE
+        elseif v:IsA("SpecialMesh") then
+            v.Scale = v.Scale * SCALE
+        end
+    end
+    
+    -- Invisible
+    for _, v in ipairs(weapon:GetDescendants()) do
+        if v:IsA("BasePart") or v:IsA("MeshPart") or v:IsA("Decal") or v:IsA("Texture") then
+            v.Transparency = 1
+        end
+    end
+end
+
+-- Start loop
+connection = RunService.Heartbeat:Connect(apply)
+
+-- Clean up on character death/reset (optional safety)
+player.CharacterRemoving:Connect(function()
+    if connection then
+        connection:Disconnect()
+        connection = nil
+    end
+end)
+   end,
+})
+
+local Button = MainTab:CreateButton({
+   Name = "Fast attack (Don't use with Big Boi Hitbox)",
+   Callback = function()
+        -- Blox Fruits COMPACT MULTI-HIT AUTO (NO GUI) – AUTO-START v2
+-- Starts automatically on execute
+-- Range 5000, Cooldown 0.4s, Targets both enemies & players
+-- Stops on death/reset or re-execute
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+
+local RegisterAttack = ReplicatedStorage.Modules.Net["RE/RegisterAttack"]
+local RegisterHit = ReplicatedStorage.Modules.Net["RE/RegisterHit"]
+
+-- Settings (as requested)
+local RANGE = 5000
+local COOLDOWN = 0.4
+local ATTACKS_PER_CYCLE = 10
+local MAX_HITS_AT_ONCE = 10
+local TARGET_MODE = "Both"  -- "Players", "Enemies", "Both"
+
+-- Toggle state (stops on re-execute or death)
+local active = true
+
+-- Simple toggle on re-execute using getgenv
+if getgenv and getgenv().MultiHitAutoRunning then
+    active = false
+    getgenv().MultiHitAutoRunning = nil
+    print("Multi-hit auto STOPPED (re-executed)")
+    return
+end
+
+getgenv().MultiHitAutoRunning = true
+print("Multi-hit auto STARTED – Range 5000 | Cooldown 0.4s | Targets Both")
+
+-- Clean up on death/reset
+player.CharacterRemoving:Connect(function()
+    active = false
+    getgenv().MultiHitAutoRunning = nil
+    print("Multi-hit auto STOPPED (death/reset)")
+end)
+
+-- Main loop
+task.spawn(function()
+    while active do
+        local char = player.Character
+        if not char or not char:FindFirstChild("HumanoidRootPart") then
+            task.wait(0.8)
+            continue
+        end
+        
+        local hrp = char.HumanoidRootPart
+        local myPos = hrp.Position
+        
+        local validTargets = {}
+        
+        -- Enemies
+        if TARGET_MODE == "Enemies" or TARGET_MODE == "Both" then
+            local enemies = workspace:FindFirstChild("Enemies")
+            if enemies then
+                for _, enemy in ipairs(enemies:GetChildren()) do
+                    local root = enemy:FindFirstChild("HumanoidRootPart")
+                    local hum = enemy:FindFirstChild("Humanoid")
+                    if root and hum and hum.Health > 0 then
+                        if (myPos - root.Position).Magnitude <= RANGE then
+                            local part = enemy:FindFirstChild("LeftLowerLeg") or enemy:FindFirstChild("RightUpperLeg") or root
+                            if part then
+                                table.insert(validTargets, {enemy, part})
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        -- Players
+        if TARGET_MODE == "Players" or TARGET_MODE == "Both" then
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= player and plr.Character then
+                    local c = plr.Character
+                    local root = c:FindFirstChild("HumanoidRootPart")
+                    local hum = c:FindFirstChild("Humanoid")
+                    if root and hum and hum.Health > 0 then
+                        if (myPos - root.Position).Magnitude <= RANGE then
+                            local part = c:FindFirstChild("LeftLowerLeg") or c:FindFirstChild("RightUpperLeg") or root
+                            if part then
+                                table.insert(validTargets, {c, part})
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        -- Attack bundle
+        if #validTargets > 0 then
+            for _ = 1, ATTACKS_PER_CYCLE do
+                RegisterAttack:FireServer(0.40000000596046)
+            end
+            
+            local bundled = {}
+            for i = 1, math.min(#validTargets, MAX_HITS_AT_ONCE) do
+                table.insert(bundled, validTargets[i])
+            end
+            
+            if #bundled > 0 then
+                local mainPart = bundled[1][2]
+                RegisterHit:FireServer(mainPart, bundled, nil, "712e867d")
+            end
+        end
+        
+        task.wait(COOLDOWN)
+    end
+    
+    print("Multi-hit auto loop stopped")
+end)
+   end,
+})
+
+local Button = MainTab:CreateButton({
+   Name = "Attack every 1s ( No sussy kill )",
+   Callback = function()
+            
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+
+local RegisterAttack = ReplicatedStorage.Modules.Net["RE/RegisterAttack"]
+local RegisterHit = ReplicatedStorage.Modules.Net["RE/RegisterHit"]
+
+-- Settings (as requested)
+local RANGE = 5000
+local COOLDOWN = 1
+local ATTACKS_PER_CYCLE = 10
+local MAX_HITS_AT_ONCE = 10
+local TARGET_MODE = "Both"  -- "Players", "Enemies", "Both"
+
+-- Toggle state (stops on re-execute or death)
+local active = true
+
+-- Simple toggle on re-execute using getgenv
+if getgenv and getgenv().MultiHitAutoRunning then
+    active = false
+    getgenv().MultiHitAutoRunning = nil
+    print("Multi-hit auto STOPPED (re-executed)")
+    return
+end
+
+getgenv().MultiHitAutoRunning = true
+print("Multi-hit auto STARTED – Range 5000 | Cooldown 0.4s | Targets Both")
+
+-- Clean up on death/reset
+player.CharacterRemoving:Connect(function()
+    active = false
+    getgenv().MultiHitAutoRunning = nil
+    print("Multi-hit auto STOPPED (death/reset)")
+end)
+
+-- Main loop
+task.spawn(function()
+    while active do
+        local char = player.Character
+        if not char or not char:FindFirstChild("HumanoidRootPart") then
+            task.wait(0.8)
+            continue
+        end
+        
+        local hrp = char.HumanoidRootPart
+        local myPos = hrp.Position
+        
+        local validTargets = {}
+        
+        -- Enemies
+        if TARGET_MODE == "Enemies" or TARGET_MODE == "Both" then
+            local enemies = workspace:FindFirstChild("Enemies")
+            if enemies then
+                for _, enemy in ipairs(enemies:GetChildren()) do
+                    local root = enemy:FindFirstChild("HumanoidRootPart")
+                    local hum = enemy:FindFirstChild("Humanoid")
+                    if root and hum and hum.Health > 0 then
+                        if (myPos - root.Position).Magnitude <= RANGE then
+                            local part = enemy:FindFirstChild("LeftLowerLeg") or enemy:FindFirstChild("RightUpperLeg") or root
+                            if part then
+                                table.insert(validTargets, {enemy, part})
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        -- Players
+        if TARGET_MODE == "Players" or TARGET_MODE == "Both" then
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= player and plr.Character then
+                    local c = plr.Character
+                    local root = c:FindFirstChild("HumanoidRootPart")
+                    local hum = c:FindFirstChild("Humanoid")
+                    if root and hum and hum.Health > 0 then
+                        if (myPos - root.Position).Magnitude <= RANGE then
+                            local part = c:FindFirstChild("LeftLowerLeg") or c:FindFirstChild("RightUpperLeg") or root
+                            if part then
+                                table.insert(validTargets, {c, part})
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        -- Attack bundle
+        if #validTargets > 0 then
+            for _ = 1, ATTACKS_PER_CYCLE do
+                RegisterAttack:FireServer(0.40000000596046)
+            end
+            
+            local bundled = {}
+            for i = 1, math.min(#validTargets, MAX_HITS_AT_ONCE) do
+                table.insert(bundled, validTargets[i])
+            end
+            
+            if #bundled > 0 then
+                local mainPart = bundled[1][2]
+                RegisterHit:FireServer(mainPart, bundled, nil, "712e867d")
+            end
+        end
+        
+        task.wait(COOLDOWN)
+    end
+    
+    print("Multi-hit auto loop stopped")
+end)
+    end,
+})
+
+local Button = MainTab:CreateButton({
+   Name = "Super Fast Attack!! (Risky and can make you Desync)",
+   Callback = function()
+            
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+
+local RegisterAttack = ReplicatedStorage.Modules.Net["RE/RegisterAttack"]
+local RegisterHit = ReplicatedStorage.Modules.Net["RE/RegisterHit"]
+
+-- Settings (as requested)
+local RANGE = 5000
+local COOLDOWN = 0.01
+local ATTACKS_PER_CYCLE = 10
+local MAX_HITS_AT_ONCE = 10
+local TARGET_MODE = "Both"  -- "Players", "Enemies", "Both"
+
+-- Toggle state (stops on re-execute or death)
+local active = true
+
+-- Simple toggle on re-execute using getgenv
+if getgenv and getgenv().MultiHitAutoRunning then
+    active = false
+    getgenv().MultiHitAutoRunning = nil
+    print("Multi-hit auto STOPPED (re-executed)")
+    return
+end
+
+getgenv().MultiHitAutoRunning = true
+print("Multi-hit auto STARTED – Range 5000 | Cooldown 0.4s | Targets Both")
+
+-- Clean up on death/reset
+player.CharacterRemoving:Connect(function()
+    active = false
+    getgenv().MultiHitAutoRunning = nil
+    print("Multi-hit auto STOPPED (death/reset)")
+end)
+
+-- Main loop
+task.spawn(function()
+    while active do
+        local char = player.Character
+        if not char or not char:FindFirstChild("HumanoidRootPart") then
+            task.wait(0.8)
+            continue
+        end
+        
+        local hrp = char.HumanoidRootPart
+        local myPos = hrp.Position
+        
+        local validTargets = {}
+        
+        -- Enemies
+        if TARGET_MODE == "Enemies" or TARGET_MODE == "Both" then
+            local enemies = workspace:FindFirstChild("Enemies")
+            if enemies then
+                for _, enemy in ipairs(enemies:GetChildren()) do
+                    local root = enemy:FindFirstChild("HumanoidRootPart")
+                    local hum = enemy:FindFirstChild("Humanoid")
+                    if root and hum and hum.Health > 0 then
+                        if (myPos - root.Position).Magnitude <= RANGE then
+                            local part = enemy:FindFirstChild("LeftLowerLeg") or enemy:FindFirstChild("RightUpperLeg") or root
+                            if part then
+                                table.insert(validTargets, {enemy, part})
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        -- Players
+        if TARGET_MODE == "Players" or TARGET_MODE == "Both" then
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= player and plr.Character then
+                    local c = plr.Character
+                    local root = c:FindFirstChild("HumanoidRootPart")
+                    local hum = c:FindFirstChild("Humanoid")
+                    if root and hum and hum.Health > 0 then
+                        if (myPos - root.Position).Magnitude <= RANGE then
+                            local part = c:FindFirstChild("LeftLowerLeg") or c:FindFirstChild("RightUpperLeg") or root
+                            if part then
+                                table.insert(validTargets, {c, part})
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        -- Attack bundle
+        if #validTargets > 0 then
+            for _ = 1, ATTACKS_PER_CYCLE do
+                RegisterAttack:FireServer(0.40000000596046)
+            end
+            
+            local bundled = {}
+            for i = 1, math.min(#validTargets, MAX_HITS_AT_ONCE) do
+                table.insert(bundled, validTargets[i])
+            end
+            
+            if #bundled > 0 then
+                local mainPart = bundled[1][2]
+                RegisterHit:FireServer(mainPart, bundled, nil, "712e867d")
+            end
+        end
+        
+        task.wait(COOLDOWN)
+    end
+    
+    print("Multi-hit auto loop stopped")
+end)
+   end,
+})
+
+
+local MainTab = Window:CreateTab("Rog Stuff", nil) -- Title, Image
+local MainSection = MainTab:CreateSection("Have fun")
