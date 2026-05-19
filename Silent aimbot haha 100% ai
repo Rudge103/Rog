@@ -1,0 +1,330 @@
+-- SILENT AIMBOT (Players + NPCs) – Tiny GUI, Accurate FOV
+-- Based on your working script. FOV circle now matches targeting area exactly.
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local GuiService = game:GetService("GuiService")
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+local Camera = Workspace.CurrentCamera
+local circle = Drawing.new("Circle")
+
+-- ===== CONFIGURATION =====
+if not getgenv().setting then
+    getgenv().setting = {
+        Fov = 110,
+        Color = Color3.fromRGB(255, 0, 0),
+    }
+end
+
+-- ===== GUI CONTROLS =====
+local AimbotEnabled = true
+local TargetMode = "Both"
+
+-- ===== TARGET VARIABLES =====
+local Playersaimbot = nil
+local PlayersPosition = nil
+local NPCTargetPart = nil
+
+-- ===== FOV CIRCLE UPDATE (perfect match) =====
+local function updateCircle()
+    if circle.__OBJECT_EXISTS then
+        circle.Transparency = 0.4
+        circle.Visible = true
+        circle.Thickness = 2
+        circle.Color = getgenv().setting.Color
+        circle.NumSides = 100
+        -- Same formula as targeting: (Fov * 6 - 8) / 2
+        circle.Radius = (getgenv().setting.Fov * 6 - 8) / 2
+        circle.Filled = false
+        circle.Position = Vector2.new(Mouse.X, Mouse.Y + (GuiService:GetGuiInset().Y))
+    end
+end
+
+RunService.RenderStepped:Connect(updateCircle)
+
+-- ===== NPC HELPER =====
+local function getNPCs()
+    local npcs = {}
+    local enemiesFolder = Workspace:FindFirstChild("Enemies")
+    if enemiesFolder then
+        for _, obj in ipairs(enemiesFolder:GetChildren()) do
+            local hum = obj:FindFirstChildWhichIsA("Humanoid")
+            if hum and hum.Health > 0 then
+                local root = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head")
+                if root then
+                    table.insert(npcs, root)
+                end
+            end
+        end
+    end
+    return npcs
+end
+
+-- ===== TARGET SELECTION LOOP =====
+spawn(function()
+    pcall(function()
+        while wait() do
+            if not AimbotEnabled then
+                Playersaimbot = nil
+                NPCTargetPart = nil
+                PlayersPosition = nil
+                continue
+            end
+
+            local bestPlayerName = nil
+            local bestPlayerPos = nil
+            local bestNPC = nil
+            local bestNPCPos = nil
+            local bestPlayerDist = math.huge
+            local bestNPCDist = math.huge
+            local fovRadius = (getgenv().setting.Fov * 6 - 8) / 2
+
+            -- Players
+            if TargetMode == "Players" or TargetMode == "Both" then
+                for _, v in ipairs(Players:GetPlayers()) do
+                    if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+                        local root = v.Character.HumanoidRootPart
+                        local pos = Camera:WorldToViewportPoint(root.Position)
+                        local magnitude = (Vector2.new(pos.X, pos.Y) - Vector2.new(Mouse.X, Mouse.Y)).magnitude
+                        if magnitude < fovRadius and magnitude < bestPlayerDist then
+                            local worldDist = (root.Position - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
+                            if worldDist <= 1000 then
+                                bestPlayerDist = magnitude
+                                bestPlayerName = v.Name
+                                bestPlayerPos = root.Position
+                            end
+                        end
+                    end
+                end
+            end
+
+            -- NPCs
+            if TargetMode == "NPCs" or TargetMode == "Both" then
+                for _, part in ipairs(getNPCs()) do
+                    local pos = Camera:WorldToViewportPoint(part.Position)
+                    local magnitude = (Vector2.new(pos.X, pos.Y) - Vector2.new(Mouse.X, Mouse.Y)).magnitude
+                    if magnitude < fovRadius and magnitude < bestNPCDist then
+                        local worldDist = (part.Position - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
+                        if worldDist <= 1000 then
+                            bestNPCDist = magnitude
+                            bestNPC = part
+                            bestNPCPos = part.Position
+                        end
+                    end
+                end
+            end
+
+            if bestPlayerName then
+                Playersaimbot = bestPlayerName
+                NPCTargetPart = nil
+                PlayersPosition = bestPlayerPos
+            elseif bestNPC then
+                Playersaimbot = nil
+                NPCTargetPart = bestNPC
+                PlayersPosition = bestNPCPos
+            else
+                Playersaimbot = nil
+                NPCTargetPart = nil
+                PlayersPosition = nil
+            end
+        end
+    end)
+end)
+
+-- ===== UPDATE TARGET POSITION =====
+spawn(function()
+    while wait() do
+        if Playersaimbot then
+            local plr = Players:FindFirstChild(Playersaimbot)
+            if plr and plr.Character then
+                local root = plr.Character:FindFirstChild("HumanoidRootPart")
+                if root then
+                    PlayersPosition = root.Position
+                end
+            end
+        elseif NPCTargetPart and NPCTargetPart.Parent then
+            PlayersPosition = NPCTargetPart.Position
+        else
+            Playersaimbot = nil
+            NPCTargetPart = nil
+            PlayersPosition = nil
+        end
+    end
+end)
+
+-- ===== REMOTE HOOK =====
+spawn(function()
+    local gg = getrawmetatable(game)
+    local old = gg.__namecall
+    setreadonly(gg, false)
+    gg.__namecall = newcclosure(function(...)
+        local method = getnamecallmethod()
+        local args = {...}
+        if tostring(method) == "FireServer" then
+            if tostring(args[1]) == "RemoteEvent" then
+                if tostring(args[2]) ~= "true" and tostring(args[2]) ~= "false" then
+                    if PlayersPosition then
+                        args[2] = PlayersPosition
+                        return old(unpack(args))
+                    end
+                end
+            end
+        end
+        return old(...)
+    end)
+end)
+
+-- ===== LEFT CLICK HANDLER =====
+Mouse.Button1Down:Connect(function()
+    pcall(function()
+        if PlayersPosition then
+            local targetPart = nil
+            if Playersaimbot then
+                local plr = Players:FindFirstChild(Playersaimbot)
+                if plr and plr.Character then
+                    targetPart = plr.Character:FindFirstChild("HumanoidRootPart")
+                end
+            elseif NPCTargetPart then
+                targetPart = NPCTargetPart
+            end
+            if targetPart then
+                local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                if tool and tool:FindFirstChild("RemoteFunctionShoot") then
+                    tool.RemoteFunctionShoot:InvokeServer(PlayersPosition, targetPart)
+                end
+            end
+        end
+    end)
+end)
+
+-- ===== TINY GUI =====
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "SilentAimbot"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = game:GetService("CoreGui")
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 150, 0, 85)
+frame.Position = UDim2.new(0.01, 0, 0.3, 0)
+frame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+frame.BackgroundTransparency = 0.3
+frame.Active = true
+frame.Draggable = true
+frame.Parent = screenGui
+
+-- ON/OFF (small)
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0, 60, 0, 22)
+toggleBtn.Position = UDim2.new(0, 5, 0, 5)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(0,200,0)
+toggleBtn.Text = "ON"
+toggleBtn.TextColor3 = Color3.new(1,1,1)
+toggleBtn.TextScaled = true
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.Parent = frame
+
+-- Mode (small)
+local modeBtn = Instance.new("TextButton")
+modeBtn.Size = UDim2.new(0, 70, 0, 22)
+modeBtn.Position = UDim2.new(0, 70, 0, 5)
+modeBtn.BackgroundColor3 = Color3.fromRGB(80,80,80)
+modeBtn.Text = "Both"
+modeBtn.TextColor3 = Color3.new(1,1,1)
+modeBtn.TextScaled = true
+modeBtn.Font = Enum.Font.GothamBold
+modeBtn.Parent = frame
+
+-- FOV input (small)
+local fovLabel = Instance.new("TextLabel")
+fovLabel.Size = UDim2.new(0, 30, 0, 20)
+fovLabel.Position = UDim2.new(0, 5, 0, 32)
+fovLabel.BackgroundTransparency = 1
+fovLabel.Text = "FOV"
+fovLabel.TextColor3 = Color3.new(1,1,1)
+fovLabel.TextScaled = true
+fovLabel.Font = Enum.Font.Gotham
+fovLabel.Parent = frame
+
+local fovInput = Instance.new("TextBox")
+fovInput.Size = UDim2.new(0, 50, 0, 22)
+fovInput.Position = UDim2.new(0, 40, 0, 30)
+fovInput.BackgroundColor3 = Color3.fromRGB(50,50,50)
+fovInput.Text = tostring(getgenv().setting.Fov)
+fovInput.TextColor3 = Color3.new(1,1,1)
+fovInput.TextScaled = true
+fovInput.Font = Enum.Font.GothamBold
+fovInput.Parent = frame
+
+fovInput.FocusLost:Connect(function()
+    local newFov = tonumber(fovInput.Text)
+    if newFov and newFov >= 30 and newFov <= 500 then
+        getgenv().setting.Fov = newFov
+        updateCircle()
+    else
+        fovInput.Text = tostring(getgenv().setting.Fov)
+    end
+end)
+
+-- Target label (small)
+local targetLabel = Instance.new("TextLabel")
+targetLabel.Size = UDim2.new(0, 140, 0, 20)
+targetLabel.Position = UDim2.new(0, 5, 0, 58)
+targetLabel.BackgroundTransparency = 1
+targetLabel.Text = "Target: None"
+targetLabel.TextColor3 = Color3.new(0.8,0.8,0.8)
+targetLabel.TextScaled = true
+targetLabel.Font = Enum.Font.Gotham
+targetLabel.Parent = frame
+
+-- Toggle
+toggleBtn.MouseButton1Click:Connect(function()
+    AimbotEnabled = not AimbotEnabled
+    if AimbotEnabled then
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(0,200,0)
+        toggleBtn.Text = "ON"
+    else
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(200,0,0)
+        toggleBtn.Text = "OFF"
+        Playersaimbot = nil
+        NPCTargetPart = nil
+        PlayersPosition = nil
+        targetLabel.Text = "OFF"
+    end
+end)
+
+-- Cycle mode
+modeBtn.MouseButton1Click:Connect(function()
+    if TargetMode == "Players" then
+        TargetMode = "NPCs"
+        modeBtn.Text = "NPCs"
+    elseif TargetMode == "NPCs" then
+        TargetMode = "Both"
+        modeBtn.Text = "Both"
+    else
+        TargetMode = "Players"
+        modeBtn.Text = "Players"
+    end
+end)
+
+-- Update target label
+spawn(function()
+    while wait(0.2) do
+        if AimbotEnabled then
+            if Playersaimbot then
+                targetLabel.Text = "Target: " .. string.sub(Playersaimbot,1,10)
+            elseif NPCTargetPart then
+                local npcName = NPCTargetPart.Parent and NPCTargetPart.Parent.Name or "NPC"
+                targetLabel.Text = "Target: " .. string.sub(npcName,1,10)
+            else
+                targetLabel.Text = "Target: None"
+            end
+        else
+            targetLabel.Text = "OFF"
+        end
+    end
+end)
+
+print("Silent Aimbot – Tiny GUI, FOV circle matches targeting range. Adjust FOV via text box.")
