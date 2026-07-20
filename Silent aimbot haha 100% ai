@@ -1,11 +1,12 @@
 -- SILENT AIMBOT (Players + NPCs) – Tiny GUI, Accurate FOV
--- Based on your working script. FOV circle now matches targeting area exactly.
+-- Standard weapons + Skull Guitar TAP (with Validator2) both working.
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local GuiService = game:GetService("GuiService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 local Camera = Workspace.CurrentCamera
@@ -28,7 +29,7 @@ local Playersaimbot = nil
 local PlayersPosition = nil
 local NPCTargetPart = nil
 
--- ===== FOV CIRCLE UPDATE (perfect match) =====
+-- ===== FOV CIRCLE =====
 local function updateCircle()
     if circle.__OBJECT_EXISTS then
         circle.Transparency = 0.4
@@ -36,13 +37,11 @@ local function updateCircle()
         circle.Thickness = 2
         circle.Color = getgenv().setting.Color
         circle.NumSides = 100
-        -- Same formula as targeting: (Fov * 6 - 8) / 2
         circle.Radius = (getgenv().setting.Fov * 6 - 8) / 2
         circle.Filled = false
         circle.Position = Vector2.new(Mouse.X, Mouse.Y + (GuiService:GetGuiInset().Y))
     end
 end
-
 RunService.RenderStepped:Connect(updateCircle)
 
 -- ===== NPC HELPER =====
@@ -155,7 +154,50 @@ spawn(function()
     end
 end)
 
--- ===== REMOTE HOOK =====
+-- ===== FIND SKULL GUITAR REMOTE =====
+local skullGuitarRemote = nil
+
+local function findSkullGuitarRemote()
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if backpack then
+        local tool = backpack:FindFirstChild("Skull Guitar")
+        if tool then
+            local remote = tool:FindFirstChild("RemoteEvent")
+            if remote then
+                skullGuitarRemote = remote
+                return
+            end
+        end
+    end
+    local char = LocalPlayer.Character
+    if char then
+        local tool = char:FindFirstChild("Skull Guitar")
+        if tool then
+            local remote = tool:FindFirstChild("RemoteEvent")
+            if remote then
+                skullGuitarRemote = remote
+                return
+            end
+        end
+    end
+    skullGuitarRemote = nil
+end
+
+findSkullGuitarRemote()
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    findSkullGuitarRemote()
+end)
+
+LocalPlayer.Backpack.ChildAdded:Connect(function(child)
+    if child.Name == "Skull Guitar" then
+        task.wait(0.1)
+        findSkullGuitarRemote()
+    end
+end)
+
+-- ===== REMOTE HOOK (Standard + Skull Guitar) =====
 spawn(function()
     local gg = getrawmetatable(game)
     local old = gg.__namecall
@@ -164,8 +206,32 @@ spawn(function()
         local method = getnamecallmethod()
         local args = {...}
         if tostring(method) == "FireServer" then
+            -- Only intercept if the first argument is a RemoteEvent (standard filter)
             if tostring(args[1]) == "RemoteEvent" then
-                if tostring(args[2]) ~= "true" and tostring(args[2]) ~= "false" then
+                -- ===== SKULL GUITAR "TAP" (special case) =====
+                if skullGuitarRemote and rawequal(args[1], skullGuitarRemote) then
+                    -- Check if the first actual argument is "TAP" and second is Vector3
+                    if tostring(args[2]) == "TAP" and typeof(args[3]) == "Vector3" then
+                        -- Fire Validator2 first
+                        local validator = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("Validator2")
+                        if validator then
+                            pcall(function()
+                                validator:FireServer(950989, 11)
+                            end)
+                        end
+                        -- Replace the vector with target position if locked
+                        if PlayersPosition then
+                            args[3] = PlayersPosition
+                            return old(unpack(args))
+                        else
+                            return old(...)
+                        end
+                    end
+                end
+
+                -- ===== STANDARD WEAPONS =====
+                -- If the first actual argument is a Vector3 (not a boolean), replace it with target position
+                if typeof(args[2]) == "Vector3" and tostring(args[2]) ~= "true" and tostring(args[2]) ~= "false" then
                     if PlayersPosition then
                         args[2] = PlayersPosition
                         return old(unpack(args))
@@ -177,7 +243,7 @@ spawn(function()
     end)
 end)
 
--- ===== LEFT CLICK HANDLER =====
+-- ===== LEFT CLICK HANDLER (for RemoteFunctionShoot) =====
 Mouse.Button1Down:Connect(function()
     pcall(function()
         if PlayersPosition then
@@ -215,7 +281,7 @@ frame.Active = true
 frame.Draggable = true
 frame.Parent = screenGui
 
--- ON/OFF (small)
+-- ON/OFF
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Size = UDim2.new(0, 60, 0, 22)
 toggleBtn.Position = UDim2.new(0, 5, 0, 5)
@@ -226,7 +292,7 @@ toggleBtn.TextScaled = true
 toggleBtn.Font = Enum.Font.GothamBold
 toggleBtn.Parent = frame
 
--- Mode (small)
+-- Mode
 local modeBtn = Instance.new("TextButton")
 modeBtn.Size = UDim2.new(0, 70, 0, 22)
 modeBtn.Position = UDim2.new(0, 70, 0, 5)
@@ -237,7 +303,7 @@ modeBtn.TextScaled = true
 modeBtn.Font = Enum.Font.GothamBold
 modeBtn.Parent = frame
 
--- FOV input (small)
+-- FOV input
 local fovLabel = Instance.new("TextLabel")
 fovLabel.Size = UDim2.new(0, 30, 0, 20)
 fovLabel.Position = UDim2.new(0, 5, 0, 32)
@@ -268,7 +334,6 @@ fovInput.FocusLost:Connect(function()
     end
 end)
 
--- Target label (small)
 local targetLabel = Instance.new("TextLabel")
 targetLabel.Size = UDim2.new(0, 140, 0, 20)
 targetLabel.Position = UDim2.new(0, 5, 0, 58)
@@ -279,7 +344,6 @@ targetLabel.TextScaled = true
 targetLabel.Font = Enum.Font.Gotham
 targetLabel.Parent = frame
 
--- Toggle
 toggleBtn.MouseButton1Click:Connect(function()
     AimbotEnabled = not AimbotEnabled
     if AimbotEnabled then
@@ -295,7 +359,6 @@ toggleBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Cycle mode
 modeBtn.MouseButton1Click:Connect(function()
     if TargetMode == "Players" then
         TargetMode = "NPCs"
@@ -309,7 +372,6 @@ modeBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Update target label
 spawn(function()
     while wait(0.2) do
         if AimbotEnabled then
@@ -327,4 +389,4 @@ spawn(function()
     end
 end)
 
-print("Silent Aimbot – Tiny GUI, FOV circle matches targeting range. Adjust FOV via text box.")
+print("Silent Aimbot (standard weapons + Skull Guitar TAP with Validator2) loaded.")
