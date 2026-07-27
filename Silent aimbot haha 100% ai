@@ -1,5 +1,6 @@
--- SILENT AIMBOT (Players + NPCs) – Tiny GUI, Accurate FOV
--- Standard weapons + Skull Guitar TAP (with Validator2) both working.
+-- SILENT AIMBOT (Remote Hook + Mouse Hook) + SMOOTH STICK
+-- Hold G to stick, release G to press Z.
+-- Works with ALL weapons: guns (Mouse.Hit) and remote-based weapons.
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -7,18 +8,43 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualInput = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 local Camera = Workspace.CurrentCamera
 local circle = Drawing.new("Circle")
 
+-- ===== LINE INDICATOR =====
+local aimLine = Drawing.new("Line")
+aimLine.Visible = false
+aimLine.Color = Color3.fromRGB(0, 0, 0)
+aimLine.Thickness = 2
+aimLine.Transparency = 0.6
+
 -- ===== CONFIGURATION =====
 if not getgenv().setting then
     getgenv().setting = {
-        Fov = 110,
+        Fov = 150,
         Color = Color3.fromRGB(255, 0, 0),
     }
 end
+
+-- ===== PREDICTION SETTINGS =====
+local PREDICTION_ENABLED = true
+local PREDICTION_MAX_TIME = 0.675
+local PREDICTION_SCALE = 0.025
+local PREDICTION_MIN_SPEED = 2.5
+local SMOOTH_FACTOR = 0.7
+
+-- ===== STICK SETTINGS =====
+local STICK_OFFSET = Vector3.new(0, 3, 0)          -- base hover offset
+local STICK_SMOOTHING = 0.3                       -- interpolation speed (0.1–0.5)
+local STICK_PREDICTION_ENABLED = true
+local STICK_PREDICTION_TIME = 0.15               -- seconds ahead to lead the target
+
+-- ===== TARGETING =====
+local MAX_WORLD_DIST = 800
+local SCORE_WEIGHT = 0.05
 
 -- ===== GUI CONTROLS =====
 local AimbotEnabled = true
@@ -26,8 +52,16 @@ local TargetMode = "Both"
 
 -- ===== TARGET VARIABLES =====
 local Playersaimbot = nil
-local PlayersPosition = nil
+local PlayersPosition = nil      -- predicted position (for remotes)
+local CurrentTargetPosition = nil -- actual position (for Mouse.Hit)
 local NPCTargetPart = nil
+local TargetVelocity = nil
+local lastPredictedPos = nil
+
+-- ===== LOCKED TARGET =====
+local lockedPlayerName = nil
+local lockedNPCPart = nil
+local stickingEnabled = false
 
 -- ===== FOV CIRCLE =====
 local function updateCircle()
@@ -42,7 +76,25 @@ local function updateCircle()
         circle.Position = Vector2.new(Mouse.X, Mouse.Y + (GuiService:GetGuiInset().Y))
     end
 end
-RunService.RenderStepped:Connect(updateCircle)
+
+-- ===== UPDATE AIM LINE =====
+local function updateAimLine()
+    if not AimbotEnabled or not CurrentTargetPosition then
+        aimLine.Visible = false
+        return
+    end
+
+    local screenPos, onScreen = Camera:WorldToViewportPoint(CurrentTargetPosition)
+    if not onScreen then
+        aimLine.Visible = false
+        return
+    end
+
+    local bottomCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+    aimLine.From = bottomCenter
+    aimLine.To = Vector2.new(screenPos.X, screenPos.Y)
+    aimLine.Visible = true
+end
 
 -- ===== NPC HELPER =====
 local function getNPCs()
@@ -70,6 +122,9 @@ spawn(function()
                 Playersaimbot = nil
                 NPCTargetPart = nil
                 PlayersPosition = nil
+                CurrentTargetPosition = nil
+                TargetVelocity = nil
+                lastPredictedPos = nil
                 continue
             end
 
@@ -77,63 +132,69 @@ spawn(function()
             local bestPlayerPos = nil
             local bestNPC = nil
             local bestNPCPos = nil
-            local bestPlayerDist = math.huge
-            local bestNPCDist = math.huge
+            local bestScore = math.huge
             local fovRadius = (getgenv().setting.Fov * 6 - 8) / 2
 
-            -- Players
-            if TargetMode == "Players" or TargetMode == "Both" then
-                for _, v in ipairs(Players:GetPlayers()) do
-                    if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
-                        local root = v.Character.HumanoidRootPart
-                        local pos = Camera:WorldToViewportPoint(root.Position)
-                        local magnitude = (Vector2.new(pos.X, pos.Y) - Vector2.new(Mouse.X, Mouse.Y)).magnitude
-                        if magnitude < fovRadius and magnitude < bestPlayerDist then
-                            local worldDist = (root.Position - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
-                            if worldDist <= 1000 then
-                                bestPlayerDist = magnitude
-                                bestPlayerName = v.Name
-                                bestPlayerPos = root.Position
-                            end
-                        end
+            local function evaluateCandidate(root, isPlayer, name)
+                local screenPos, onScreen = Camera:WorldToViewportPoint(root.Position)
+                if not onScreen then return end
+                local screenDist = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(Mouse.X, Mouse.Y)).magnitude
+                if screenDist > fovRadius then return end
+                local worldDist = (root.Position - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
+                if worldDist > MAX_WORLD_DIST then return end
+                local score = screenDist + worldDist * SCORE_WEIGHT
+                if score < bestScore then
+                    bestScore = score
+                    if isPlayer then
+                        bestPlayerName = name
+                        bestPlayerPos = root.Position
+                        TargetVelocity = root.AssemblyLinearVelocity
+                    else
+                        bestNPC = root
+                        bestNPCPos = root.Position
+                        TargetVelocity = root.AssemblyLinearVelocity
                     end
                 end
             end
 
-            -- NPCs
+            if TargetMode == "Players" or TargetMode == "Both" then
+                for _, v in ipairs(Players:GetPlayers()) do
+                    if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+                        local root = v.Character.HumanoidRootPart
+                        evaluateCandidate(root, true, v.Name)
+                    end
+                end
+            end
+
             if TargetMode == "NPCs" or TargetMode == "Both" then
                 for _, part in ipairs(getNPCs()) do
-                    local pos = Camera:WorldToViewportPoint(part.Position)
-                    local magnitude = (Vector2.new(pos.X, pos.Y) - Vector2.new(Mouse.X, Mouse.Y)).magnitude
-                    if magnitude < fovRadius and magnitude < bestNPCDist then
-                        local worldDist = (part.Position - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
-                        if worldDist <= 1000 then
-                            bestNPCDist = magnitude
-                            bestNPC = part
-                            bestNPCPos = part.Position
-                        end
-                    end
+                    evaluateCandidate(part, false, nil)
                 end
             end
 
             if bestPlayerName then
                 Playersaimbot = bestPlayerName
                 NPCTargetPart = nil
+                CurrentTargetPosition = bestPlayerPos
                 PlayersPosition = bestPlayerPos
             elseif bestNPC then
                 Playersaimbot = nil
                 NPCTargetPart = bestNPC
+                CurrentTargetPosition = bestNPCPos
                 PlayersPosition = bestNPCPos
             else
                 Playersaimbot = nil
                 NPCTargetPart = nil
                 PlayersPosition = nil
+                CurrentTargetPosition = nil
+                TargetVelocity = nil
+                lastPredictedPos = nil
             end
         end
     end)
 end)
 
--- ===== UPDATE TARGET POSITION =====
+-- ===== UPDATE TARGET POSITION (prediction for remotes) =====
 spawn(function()
     while wait() do
         if Playersaimbot then
@@ -141,20 +202,125 @@ spawn(function()
             if plr and plr.Character then
                 local root = plr.Character:FindFirstChild("HumanoidRootPart")
                 if root then
-                    PlayersPosition = root.Position
+                    local currentPos = root.Position
+                    CurrentTargetPosition = currentPos
+                    if PREDICTION_ENABLED and TargetVelocity then
+                        local speed = TargetVelocity.Magnitude
+                        if speed > PREDICTION_MIN_SPEED then
+                            local predTime = math.min(speed * PREDICTION_SCALE, PREDICTION_MAX_TIME)
+                            local predicted = currentPos + TargetVelocity * predTime
+                            if lastPredictedPos then
+                                predicted = lastPredictedPos * (1 - SMOOTH_FACTOR) + predicted * SMOOTH_FACTOR
+                            end
+                            lastPredictedPos = predicted
+                            PlayersPosition = predicted
+                        else
+                            lastPredictedPos = nil
+                            PlayersPosition = currentPos
+                        end
+                    else
+                        lastPredictedPos = nil
+                        PlayersPosition = currentPos
+                    end
+                    TargetVelocity = root.AssemblyLinearVelocity
                 end
             end
         elseif NPCTargetPart and NPCTargetPart.Parent then
-            PlayersPosition = NPCTargetPart.Position
+            local currentPos = NPCTargetPart.Position
+            CurrentTargetPosition = currentPos
+            if PREDICTION_ENABLED and TargetVelocity then
+                local speed = TargetVelocity.Magnitude
+                if speed > PREDICTION_MIN_SPEED then
+                    local predTime = math.min(speed * PREDICTION_SCALE, PREDICTION_MAX_TIME)
+                    local predicted = currentPos + TargetVelocity * predTime
+                    if lastPredictedPos then
+                        predicted = lastPredictedPos * (1 - SMOOTH_FACTOR) + predicted * SMOOTH_FACTOR
+                    end
+                    lastPredictedPos = predicted
+                    PlayersPosition = predicted
+                else
+                    lastPredictedPos = nil
+                    PlayersPosition = currentPos
+                end
+            else
+                lastPredictedPos = nil
+                PlayersPosition = currentPos
+            end
+            TargetVelocity = NPCTargetPart.AssemblyLinearVelocity
         else
             Playersaimbot = nil
             NPCTargetPart = nil
             PlayersPosition = nil
+            CurrentTargetPosition = nil
+            TargetVelocity = nil
+            lastPredictedPos = nil
         end
     end
 end)
 
--- ===== FIND SKULL GUITAR REMOTE =====
+-- ===== STICKING LOOP (SMOOTH + PREDICTION) =====
+spawn(function()
+    while wait() do
+        if not stickingEnabled or not AimbotEnabled then
+            continue
+        end
+        local targetRoot = nil
+        if lockedPlayerName then
+            local plr = Players:FindFirstChild(lockedPlayerName)
+            if plr and plr.Character then
+                targetRoot = plr.Character:FindFirstChild("HumanoidRootPart")
+            end
+        elseif lockedNPCPart and lockedNPCPart.Parent then
+            targetRoot = lockedNPCPart
+        end
+        if targetRoot and targetRoot.Parent then
+            local char = LocalPlayer.Character
+            if char then
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local targetPos = targetRoot.Position + STICK_OFFSET
+                    if STICK_PREDICTION_ENABLED then
+                        local vel = targetRoot.AssemblyLinearVelocity
+                        if vel and vel.Magnitude > 0.5 then
+                            targetPos = targetPos + vel * STICK_PREDICTION_TIME
+                        end
+                    end
+                    local targetCF = CFrame.new(targetPos)
+                    hrp.CFrame = hrp.CFrame:Lerp(targetCF, STICK_SMOOTHING)
+                    hrp.Velocity = Vector3.zero
+                    hrp.RotVelocity = Vector3.zero
+                end
+            end
+        end
+    end
+end)
+
+-- ===== KEY HANDLERS =====
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.G then
+        lockedPlayerName = Playersaimbot
+        lockedNPCPart = NPCTargetPart
+        stickingEnabled = true
+        print("Locked target:", lockedPlayerName or (lockedNPCPart and lockedNPCPart.Parent.Name) or "None")
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.G then
+        stickingEnabled = false
+        lockedPlayerName = nil
+        lockedNPCPart = nil
+        -- Press Z key (down then up)
+        VirtualInput:SendKeyEvent(true, Enum.KeyCode.Z, false, nil)
+        task.wait(0.05)
+        VirtualInput:SendKeyEvent(false, Enum.KeyCode.Z, false, nil)
+        print("Pressed Z on release of G")
+    end
+end)
+
+-- ===== REMOTE HOOK (for Skull Guitar and generic remotes) =====
 local skullGuitarRemote = nil
 
 local function findSkullGuitarRemote()
@@ -197,7 +363,6 @@ LocalPlayer.Backpack.ChildAdded:Connect(function(child)
     end
 end)
 
--- ===== REMOTE HOOK (Standard + Skull Guitar) =====
 spawn(function()
     local gg = getrawmetatable(game)
     local old = gg.__namecall
@@ -206,20 +371,15 @@ spawn(function()
         local method = getnamecallmethod()
         local args = {...}
         if tostring(method) == "FireServer" then
-            -- Only intercept if the first argument is a RemoteEvent (standard filter)
             if tostring(args[1]) == "RemoteEvent" then
-                -- ===== SKULL GUITAR "TAP" (special case) =====
                 if skullGuitarRemote and rawequal(args[1], skullGuitarRemote) then
-                    -- Check if the first actual argument is "TAP" and second is Vector3
                     if tostring(args[2]) == "TAP" and typeof(args[3]) == "Vector3" then
-                        -- Fire Validator2 first
                         local validator = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("Validator2")
                         if validator then
                             pcall(function()
                                 validator:FireServer(950989, 11)
                             end)
                         end
-                        -- Replace the vector with target position if locked
                         if PlayersPosition then
                             args[3] = PlayersPosition
                             return old(unpack(args))
@@ -229,8 +389,6 @@ spawn(function()
                     end
                 end
 
-                -- ===== STANDARD WEAPONS =====
-                -- If the first actual argument is a Vector3 (not a boolean), replace it with target position
                 if typeof(args[2]) == "Vector3" and tostring(args[2]) ~= "true" and tostring(args[2]) ~= "false" then
                     if PlayersPosition then
                         args[2] = PlayersPosition
@@ -243,7 +401,43 @@ spawn(function()
     end)
 end)
 
--- ===== LEFT CLICK HANDLER (for RemoteFunctionShoot) =====
+-- ===== MOUSE METATABLE HOOK (for guns that use Mouse.Hit) =====
+local oldIndex
+local mouseMetatable = getrawmetatable(Mouse)
+if mouseMetatable then
+    oldIndex = mouseMetatable.__index
+    setreadonly(mouseMetatable, false)
+    mouseMetatable.__index = newcclosure(function(self, key)
+        -- Always redirect if aimbot is enabled and we have a target
+        if AimbotEnabled and CurrentTargetPosition then
+            if key == "Hit" then
+                -- Use the actual (non-predicted) position for accurate shooting
+                return CFrame.new(CurrentTargetPosition)
+            elseif key == "Target" then
+                -- Return the actual BasePart (torso) if available
+                local targetRoot = nil
+                if lockedPlayerName then
+                    local plr = Players:FindFirstChild(lockedPlayerName)
+                    if plr and plr.Character then
+                        targetRoot = plr.Character:FindFirstChild("HumanoidRootPart")
+                    end
+                elseif lockedNPCPart and lockedNPCPart.Parent then
+                    targetRoot = lockedNPCPart
+                end
+                if targetRoot then
+                    return targetRoot
+                end
+            end
+        end
+        return oldIndex(self, key)
+    end)
+    setreadonly(mouseMetatable, true)
+    print("Mouse property hook installed (silent, torso).")
+else
+    warn("Could not hook Mouse metatable.")
+end
+
+-- ===== LEFT CLICK HANDLER (for weapons using RemoteFunctionShoot) =====
 Mouse.Button1Down:Connect(function()
     pcall(function()
         if PlayersPosition then
@@ -266,14 +460,20 @@ Mouse.Button1Down:Connect(function()
     end)
 end)
 
--- ===== TINY GUI =====
+-- ===== UPDATE FOV + LINE EVERY FRAME =====
+RunService.RenderStepped:Connect(function()
+    updateCircle()
+    updateAimLine()
+end)
+
+-- ===== FULL GUI =====
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SilentAimbot"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = game:GetService("CoreGui")
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 150, 0, 85)
+frame.Size = UDim2.new(0, 150, 0, 100)
 frame.Position = UDim2.new(0.01, 0, 0.3, 0)
 frame.BackgroundColor3 = Color3.fromRGB(20,20,20)
 frame.BackgroundTransparency = 0.3
@@ -303,10 +503,21 @@ modeBtn.TextScaled = true
 modeBtn.Font = Enum.Font.GothamBold
 modeBtn.Parent = frame
 
--- FOV input
+-- Prediction toggle
+local predBtn = Instance.new("TextButton")
+predBtn.Size = UDim2.new(0, 60, 0, 22)
+predBtn.Position = UDim2.new(0, 5, 0, 32)
+predBtn.BackgroundColor3 = Color3.fromRGB(0,150,200)
+predBtn.Text = "Pred: ON"
+predBtn.TextColor3 = Color3.new(1,1,1)
+predBtn.TextScaled = true
+predBtn.Font = Enum.Font.GothamBold
+predBtn.Parent = frame
+
+-- FOV label + input
 local fovLabel = Instance.new("TextLabel")
 fovLabel.Size = UDim2.new(0, 30, 0, 20)
-fovLabel.Position = UDim2.new(0, 5, 0, 32)
+fovLabel.Position = UDim2.new(0, 70, 0, 32)
 fovLabel.BackgroundTransparency = 1
 fovLabel.Text = "FOV"
 fovLabel.TextColor3 = Color3.new(1,1,1)
@@ -315,8 +526,8 @@ fovLabel.Font = Enum.Font.Gotham
 fovLabel.Parent = frame
 
 local fovInput = Instance.new("TextBox")
-fovInput.Size = UDim2.new(0, 50, 0, 22)
-fovInput.Position = UDim2.new(0, 40, 0, 30)
+fovInput.Size = UDim2.new(0, 45, 0, 22)
+fovInput.Position = UDim2.new(0, 100, 0, 30)
 fovInput.BackgroundColor3 = Color3.fromRGB(50,50,50)
 fovInput.Text = tostring(getgenv().setting.Fov)
 fovInput.TextColor3 = Color3.new(1,1,1)
@@ -334,6 +545,7 @@ fovInput.FocusLost:Connect(function()
     end
 end)
 
+-- Target label
 local targetLabel = Instance.new("TextLabel")
 targetLabel.Size = UDim2.new(0, 140, 0, 20)
 targetLabel.Position = UDim2.new(0, 5, 0, 58)
@@ -344,6 +556,14 @@ targetLabel.TextScaled = true
 targetLabel.Font = Enum.Font.Gotham
 targetLabel.Parent = frame
 
+-- Prediction button logic
+predBtn.MouseButton1Click:Connect(function()
+    PREDICTION_ENABLED = not PREDICTION_ENABLED
+    predBtn.Text = PREDICTION_ENABLED and "Pred: ON" or "Pred: OFF"
+    predBtn.BackgroundColor3 = PREDICTION_ENABLED and Color3.fromRGB(0,150,200) or Color3.fromRGB(150,0,0)
+end)
+
+-- Toggle ON/OFF
 toggleBtn.MouseButton1Click:Connect(function()
     AimbotEnabled = not AimbotEnabled
     if AimbotEnabled then
@@ -355,10 +575,12 @@ toggleBtn.MouseButton1Click:Connect(function()
         Playersaimbot = nil
         NPCTargetPart = nil
         PlayersPosition = nil
+        CurrentTargetPosition = nil
         targetLabel.Text = "OFF"
     end
 end)
 
+-- Mode cycle
 modeBtn.MouseButton1Click:Connect(function()
     if TargetMode == "Players" then
         TargetMode = "NPCs"
@@ -372,21 +594,37 @@ modeBtn.MouseButton1Click:Connect(function()
     end
 end)
 
+-- Update target label
 spawn(function()
     while wait(0.2) do
         if AimbotEnabled then
-            if Playersaimbot then
-                targetLabel.Text = "Target: " .. string.sub(Playersaimbot,1,10)
+            local targetName = "None"
+            if lockedPlayerName then
+                targetName = string.sub(lockedPlayerName,1,10)
+            elseif lockedNPCPart then
+                local npcName = lockedNPCPart.Parent and lockedNPCPart.Parent.Name or "NPC"
+                targetName = string.sub(npcName,1,10)
+            elseif Playersaimbot then
+                targetName = string.sub(Playersaimbot,1,10)
             elseif NPCTargetPart then
                 local npcName = NPCTargetPart.Parent and NPCTargetPart.Parent.Name or "NPC"
-                targetLabel.Text = "Target: " .. string.sub(npcName,1,10)
+                targetName = string.sub(npcName,1,10)
+            end
+            if stickingEnabled then
+                targetLabel.Text = "Sticking: " .. targetName
+                targetLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
             else
-                targetLabel.Text = "Target: None"
+                targetLabel.Text = "Target: " .. targetName
+                targetLabel.TextColor3 = Color3.fromRGB(0.8,0.8,0.8)
             end
         else
             targetLabel.Text = "OFF"
+            targetLabel.TextColor3 = Color3.fromRGB(0.8,0.8,0.8)
         end
     end
 end)
 
-print("Silent Aimbot (standard weapons + Skull Guitar TAP with Validator2) loaded.")
+print("Silent Aimbot (Remote + Mouse hooks) + Smooth Stick loaded.")
+print("   All weapons are affected: guns use Mouse.Hit, others use remotes.")
+print("   Hold G: locks target and sticks with prediction.")
+print("   Release G: press Z and stop sticking.")
