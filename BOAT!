@@ -1,0 +1,401 @@
+-- Blox Fruits - UNIVERSAL Boat Control GUI (CHAOS FOLLOW + TWEEN)
+-- Click "FOLLOW TARGET" to make the boat spin and fling the target wildly with smooth tweens.
+
+-- Services
+local RunService       = game:GetService("RunService")
+local TweenService     = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local Players          = game:GetService("Players")
+local CoreGui          = game:GetService("CoreGui")
+
+local LP        = Players.LocalPlayer
+local PlayerGui = LP:WaitForChild("PlayerGui")
+
+-- State
+local spinConnection
+local followConnection
+local isSpinning   = false
+local isChaosFollowing = false
+local spinSpeed    = 5
+
+local followDistance = 18
+local orbitAngle = 0
+local orbitSpeed = 3
+local followTargetPlayer = LP
+
+-- Custom tween coordinates (default: a spot in front of you)
+local customTweenPos = Vector3.new(0, 6, -55)
+
+------------------------------------------------------------
+-- Helpers
+------------------------------------------------------------
+local function getRoot()
+    local char = workspace.Characters:FindFirstChild(LP.Name)
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function getTargetRoot()
+    if not followTargetPlayer then return end
+    local char = followTargetPlayer.Character
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+-- UNIVERSAL BOAT FINDER
+local function getBoat()
+    local boatsFolder = workspace:FindFirstChild("Boats")
+    local targetRoot = getTargetRoot()
+    if not (boatsFolder and targetRoot) then return end
+
+    local closestBoat
+    local closestDist = math.huge
+
+    for _, boat in ipairs(boatsFolder:GetChildren()) do
+        if boat:IsA("Model") then
+            local part = boat.PrimaryPart or boat:FindFirstChildWhichIsA("BasePart")
+            if part then
+                local dist = (part.Position - targetRoot.Position).Magnitude
+                if dist < closestDist then
+                    closestDist = dist
+                    closestBoat = boat
+                end
+            end
+        end
+    end
+
+    return closestBoat
+end
+
+local function getBoatPart(boat)
+    return boat and (boat.PrimaryPart or boat:FindFirstChildWhichIsA("BasePart"))
+end
+
+------------------------------------------------------------
+-- Teleport near seat
+------------------------------------------------------------
+local function tpNearSeat()
+    local root = getRoot()
+    local boat = getBoat()
+    if not (root and boat) then return end
+
+    local seat = boat:FindFirstChildWhichIsA("VehicleSeat", true)
+        or boat:FindFirstChildWhichIsA("Seat", true)
+    if not seat then return end
+
+    root.CFrame = seat.CFrame * CFrame.new(0, 3, 0)
+end
+
+------------------------------------------------------------
+-- Spin around YOU
+------------------------------------------------------------
+local function toggleSpin()
+    isSpinning = not isSpinning
+    isChaosFollowing = false
+    if followConnection then followConnection:Disconnect() end
+
+    if not isSpinning then
+        if spinConnection then spinConnection:Disconnect() end
+        return
+    end
+
+    spinConnection = RunService.Heartbeat:Connect(function()
+        local root = getRoot()
+        local boat = getBoat()
+        if not (root and boat) then return end
+
+        local part = getBoatPart(boat)
+        if not part then return end
+
+        local angle = tick() * spinSpeed
+        local offset = CFrame.new(
+            math.cos(angle) * 60,
+            6,
+            math.sin(angle) * 60
+        )
+
+        part.CFrame = root.CFrame * offset
+    end)
+end
+
+------------------------------------------------------------
+-- Tween once (front of you)
+------------------------------------------------------------
+local function tweenBoat()
+    local root = getRoot()
+    local boat = getBoat()
+    if not (root and boat) then return end
+
+    local part = getBoatPart(boat)
+    if not part then return end
+
+    TweenService:Create(
+        part,
+        TweenInfo.new(3, Enum.EasingStyle.Quint),
+        { CFrame = root.CFrame * CFrame.new(0, 6, -55) }
+    ):Play()
+end
+
+------------------------------------------------------------
+-- Tween to custom world coordinates (absolute)
+------------------------------------------------------------
+local function tweenBoatToWorld(pos)
+    local boat = getBoat()
+    if not boat then return end
+    local part = getBoatPart(boat)
+    if not part then return end
+
+    TweenService:Create(
+        part,
+        TweenInfo.new(3, Enum.EasingStyle.Quint),
+        { CFrame = CFrame.new(pos) }
+    ):Play()
+end
+
+------------------------------------------------------------
+-- CHAOS FOLLOW: spin rapidly, vary distance/height, add fling rotations (WITH TWEEN)
+------------------------------------------------------------
+local function toggleFollow()
+    isChaosFollowing = not isChaosFollowing
+    isSpinning = false
+    if spinConnection then spinConnection:Disconnect() end
+
+    if not isChaosFollowing then
+        if followConnection then followConnection:Disconnect() end
+        return
+    end
+
+    local chaosAngle = 0
+    local chaosRadius = 15
+    local chaosHeight = 5
+
+    followConnection = RunService.Heartbeat:Connect(function(dt)
+        local root = getTargetRoot()
+        local boat = getBoat()
+        if not (root and boat) then return end
+
+        local part = getBoatPart(boat)
+        if not part then return end
+
+        -- Update chaos parameters
+        chaosAngle = chaosAngle + dt * 15  -- fast spinning
+        local time = tick()
+        local seed = math.floor(time / 0.15)
+        local rSeed = seed * 1.7 + 13
+        local hSeed = seed * 2.3 + 7
+        chaosRadius = 10 + math.sin(rSeed) * 15   -- 5 .. 25
+        chaosHeight = 2 + math.sin(hSeed) * 12   -- -10 .. 14
+
+        local angle = chaosAngle
+        local radius = chaosRadius
+        local height = chaosHeight
+
+        local offset = CFrame.new(
+            math.cos(angle) * radius,
+            height,
+            math.sin(angle) * radius
+        )
+
+        local targetPos = root.Position
+        local targetCF = CFrame.new(targetPos) * offset
+
+        -- Add wild rotations to fling the target
+        local randomYaw   = math.sin(time * 23) * 2
+        local randomPitch = math.sin(time * 17) * 1
+        local randomRoll  = math.sin(time * 19) * 3
+        targetCF = targetCF * CFrame.Angles(randomPitch, randomYaw, randomRoll)
+
+        -- TWEEN to target with short duration for smooth chaos
+        TweenService:Create(
+            part,
+            TweenInfo.new(0.08, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut),
+            { CFrame = targetCF }
+        ):Play()
+    end)
+end
+
+------------------------------------------------------------
+-- Player cycling
+------------------------------------------------------------
+local function getNextPlayer(current)
+    local list = Players:GetPlayers()
+    local index = table.find(list, current) or 0
+    index += 1
+    if index > #list then index = 1 end
+    return list[index]
+end
+
+------------------------------------------------------------
+-- GUI
+------------------------------------------------------------
+local function createGUI(parent)
+    if parent:FindFirstChild("BoatControlGUI") then
+        parent.BoatControlGUI:Destroy()
+    end
+
+    local sg = Instance.new("ScreenGui", parent)
+    sg.Name = "BoatControlGUI"
+    sg.ResetOnSpawn = false
+
+    local frame = Instance.new("Frame", sg)
+    frame.Size = UDim2.new(0, 300, 0, 520)
+    frame.Position = UDim2.new(0.5, -150, 0.1, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(30,30,60)
+    frame.Active = true
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0,12)
+
+    local title = Instance.new("TextLabel", frame)
+    title.Size = UDim2.new(1,0,0,32)
+    title.BackgroundTransparency = 1
+    title.Text = "Universal Boat Control"
+    title.TextColor3 = Color3.new(1,1,1)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 18
+
+    local y = 40
+    local function makeBtn(text, color, callback)
+        local btn = Instance.new("TextButton", frame)
+        btn.Size = UDim2.new(0.9,0,0,38)
+        btn.Position = UDim2.new(0.05,0,0,y)
+        btn.Text = text
+        btn.BackgroundColor3 = color
+        btn.TextColor3 = Color3.new(1,1,1)
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 14
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0,8)
+        btn.MouseButton1Click:Connect(callback)
+        y += 45
+        return btn
+    end
+
+    makeBtn("TP NEAR SEAT", Color3.fromRGB(0,220,100), tpNearSeat)
+
+    local spinBtn
+    spinBtn = makeBtn("SPIN AROUND ME", Color3.fromRGB(220,80,0), function()
+        toggleSpin()
+        spinBtn.Text = isSpinning and "STOP SPIN" or "SPIN AROUND ME"
+    end)
+
+    makeBtn("TWEEN ONCE (front)", Color3.fromRGB(0,160,220), tweenBoat)
+
+    -- Custom tween section
+    local customFrame = Instance.new("Frame", frame)
+    customFrame.Size = UDim2.new(0.9,0,0,80)
+    customFrame.Position = UDim2.new(0.05,0,0,y)
+    customFrame.BackgroundColor3 = Color3.fromRGB(40,40,60)
+    Instance.new("UICorner", customFrame).CornerRadius = UDim.new(0,8)
+    customFrame.Parent = frame
+    y += 85
+
+    local coordsLabel = Instance.new("TextLabel", customFrame)
+    coordsLabel.Size = UDim2.new(1,0,0,22)
+    coordsLabel.Position = UDim2.new(0,0,0,5)
+    coordsLabel.BackgroundTransparency = 1
+    coordsLabel.Text = "Custom Tween Coordinates (world)"
+    coordsLabel.TextColor3 = Color3.new(1,1,1)
+    coordsLabel.Font = Enum.Font.GothamBold
+    coordsLabel.TextSize = 12
+
+    local xBox = Instance.new("TextBox", customFrame)
+    xBox.Size = UDim2.new(0.3, -5, 0, 25)
+    xBox.Position = UDim2.new(0,0,0,30)
+    xBox.PlaceholderText = "X"
+    xBox.BackgroundColor3 = Color3.fromRGB(50,50,70)
+    xBox.TextColor3 = Color3.new(1,1,1)
+    xBox.Font = Enum.Font.GothamBold
+    xBox.TextSize = 14
+
+    local yBox = Instance.new("TextBox", customFrame)
+    yBox.Size = UDim2.new(0.3, -5, 0, 25)
+    yBox.Position = UDim2.new(0.35,0,0,30)
+    yBox.PlaceholderText = "Y"
+    yBox.BackgroundColor3 = Color3.fromRGB(50,50,70)
+    yBox.TextColor3 = Color3.new(1,1,1)
+    yBox.Font = Enum.Font.GothamBold
+    yBox.TextSize = 14
+
+    local zBox = Instance.new("TextBox", customFrame)
+    zBox.Size = UDim2.new(0.3, -5, 0, 25)
+    zBox.Position = UDim2.new(0.7,0,0,30)
+    zBox.PlaceholderText = "Z"
+    zBox.BackgroundColor3 = Color3.fromRGB(50,50,70)
+    zBox.TextColor3 = Color3.new(1,1,1)
+    zBox.Font = Enum.Font.GothamBold
+    zBox.TextSize = 14
+
+    local tweenCustomBtn = Instance.new("TextButton", customFrame)
+    tweenCustomBtn.Size = UDim2.new(1, -10, 0, 28)
+    tweenCustomBtn.Position = UDim2.new(0,5,0,58)
+    tweenCustomBtn.Text = "TWEEN TO CUSTOM COORDS"
+    tweenCustomBtn.BackgroundColor3 = Color3.fromRGB(0,200,150)
+    tweenCustomBtn.TextColor3 = Color3.new(1,1,1)
+    tweenCustomBtn.Font = Enum.Font.GothamBold
+    tweenCustomBtn.TextSize = 12
+    Instance.new("UICorner", tweenCustomBtn).CornerRadius = UDim.new(0,6)
+
+    tweenCustomBtn.MouseButton1Click:Connect(function()
+        local x = tonumber(xBox.Text)
+        local y = tonumber(yBox.Text)
+        local z = tonumber(zBox.Text)
+        if x and y and z then
+            tweenBoatToWorld(Vector3.new(x, y, z))
+        else
+            warn("Invalid coordinates. Please enter numbers.")
+        end
+    end)
+
+    -- CHAOS FOLLOW button
+    local followBtn
+    followBtn = makeBtn("FOLLOW TARGET (CHAOS)", Color3.fromRGB(120,120,255), function()
+        toggleFollow()
+        followBtn.Text = isChaosFollowing and "STOP CHAOS" or "FOLLOW TARGET (CHAOS)"
+    end)
+
+    local targetBtn
+    targetBtn = makeBtn("TARGET: "..followTargetPlayer.Name, Color3.fromRGB(80,140,200), function()
+        followTargetPlayer = getNextPlayer(followTargetPlayer)
+        targetBtn.Text = "TARGET: "..followTargetPlayer.Name
+    end)
+
+    makeBtn("DISTANCE +", Color3.fromRGB(80,200,120), function()
+        followDistance += 3
+    end)
+
+    makeBtn("DISTANCE -", Color3.fromRGB(200,120,80), function()
+        followDistance = math.max(6, followDistance - 3)
+    end)
+
+    -- Dragging
+    local dragging, dragStart, startPos
+    frame.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = i.Position
+            startPos = frame.Position
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = i.Position - dragStart
+            frame.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+end
+
+------------------------------------------------------------
+-- Load GUI (only once)
+------------------------------------------------------------
+if not PlayerGui:FindFirstChild("BoatControlGUI") then
+    createGUI(PlayerGui)
+else
+    PlayerGui.BoatControlGUI:Destroy()
+    createGUI(PlayerGui)
+end
+
+print("✅ UNIVERSAL Boat Control loaded (CHAOS FOLLOW with TWEEN)")
