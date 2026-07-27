@@ -1,0 +1,307 @@
+-- =====================================================================
+--           BLOX FRUITS – ULTIMATE OPTIMIZED SCRIPT
+-- =====================================================================
+-- Features:
+--   • Lighting: no bloom, no atmosphere, no shadows, full bright
+--   • Particles: keep Trails, ProjectileModel, CreationC* particles; hide rest
+--   • Decals: half‑transparent, materials: Plastic
+--   • CreationC* cleanup: 75% transparent, CubeAura/AreaHitImpact now fully transparent (not deleted)
+--   • Dressrosa recolour: parts with (80,220,99) → dark green (0,100,0)
+
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
+local UserSettings = UserSettings()
+local GameSettings = UserSettings.GameSettings
+
+-- =====================================================================
+-- PART 1: GRAPHICS QUALITY
+-- =====================================================================
+pcall(function()
+    GameSettings.GraphicsQualityLevel = 8
+end)
+
+-- =====================================================================
+-- PART 2: LIGHTING – Remove bloom, atmosphere, shadows
+-- =====================================================================
+local function applyLighting()
+    pcall(function()
+        Lighting.Bloom = false
+        Lighting.BloomIntensity = 0
+    end)
+    pcall(function()
+        local atmo = Lighting:FindFirstChild("Atmosphere")
+        if atmo then atmo:Destroy() end
+    end)
+    pcall(function()
+        local layers = Lighting:FindFirstChild("LightingLayers")
+        if layers then
+            local ghoul = layers:FindFirstChild("GhoulBlind")
+            if ghoul then ghoul:Destroy() end
+            local atmo = layers:FindFirstChild("Atmosphere")
+            if atmo then atmo:Destroy() end
+        end
+    end)
+    pcall(function()
+        Lighting.GlobalShadows = false
+        Lighting.ShadowSoftness = 0
+        Lighting.ClockTime = 14
+        Lighting.TimeOfDay = "14:00:00"
+        Lighting.Brightness = 1.2
+        Lighting.Ambient = Color3.new(0.8, 0.8, 0.8)
+        Lighting.OutdoorAmbient = Color3.new(0.9, 0.9, 0.9)
+        Lighting.ColorCorrectionEnabled = false
+        Lighting.ToneMappingEnabled = false
+        Lighting.AmbientRim = 0
+        Lighting.EnvironmentDiffuseScale = 0.5
+        Lighting.EnvironmentSpecularScale = 0.2
+        Lighting.ExposureCompensation = 0
+    end)
+end
+
+applyLighting()
+RunService.Heartbeat:Connect(applyLighting)
+
+-- =====================================================================
+-- PART 3: PARTICLES – Keep Trails and particles inside ProjectileModel/CreationC
+-- =====================================================================
+local function shouldKeepParticle(obj)
+    if obj:IsA("Trail") then
+        return true
+    end
+    local parent = obj.Parent
+    while parent do
+        if parent.Name == "ProjectileModel" or (parent.Name and parent.Name:find("^CreationC")) then
+            return true
+        end
+        parent = parent.Parent
+    end
+    return false
+end
+
+local function hideParticle(obj)
+    pcall(function()
+        if obj:IsA("ParticleEmitter") then
+            obj.Rate = 0
+            obj.Transparency = NumberSequence.new(1, 1, 1, 1, 1, 1)
+            obj.Enabled = false
+        elseif obj:IsA("Fire") or obj:IsA("Smoke") then
+            obj.Enabled = false
+        end
+    end)
+end
+
+local function applyParticleRules()
+    for _, v in ipairs(Workspace:GetDescendants()) do
+        if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Fire") or v:IsA("Smoke") then
+            if not shouldKeepParticle(v) then
+                hideParticle(v)
+            end
+        end
+    end
+end
+
+applyParticleRules()
+
+Workspace.DescendantAdded:Connect(function(child)
+    if child:IsA("ParticleEmitter") or child:IsA("Trail") or child:IsA("Fire") or child:IsA("Smoke") then
+        if not shouldKeepParticle(child) then
+            hideParticle(child)
+        end
+    end
+end)
+
+-- =====================================================================
+-- PART 4: DECALS & MATERIALS
+-- =====================================================================
+pcall(function()
+    for _, v in ipairs(Workspace:GetDescendants()) do
+        if v:IsA("Decal") then
+            v.Transparency = 0.5
+        end
+        if v:IsA("BasePart") and v.Material ~= Enum.Material.Plastic then
+            v.Material = Enum.Material.Plastic
+        end
+    end
+end)
+
+Workspace.DescendantAdded:Connect(function(child)
+    pcall(function()
+        if child:IsA("Decal") then
+            child.Transparency = 0.5
+        end
+        if child:IsA("BasePart") and child.Material ~= Enum.Material.Plastic then
+            child.Material = Enum.Material.Plastic
+        end
+    end)
+end)
+
+-- =====================================================================
+-- PART 5: DRESSROSA RECOLOUR (green parts → dark green)
+-- =====================================================================
+local DRESSROSA_TARGET = Color3.fromRGB(80, 220, 99)
+local DRESSROSA_NEW = Color3.fromRGB(255, 105, 180)
+local COLOR_TOLERANCE = 0.05
+
+local function recolorDressrosa()
+    local dressrosa = Workspace:FindFirstChild("Map")
+    if dressrosa then dressrosa = dressrosa:FindFirstChild("Dressrosa") end
+    if not dressrosa then return end
+    for _, part in ipairs(dressrosa:GetDescendants()) do
+        pcall(function()
+            if part:IsA("BasePart") then
+                local diff = (part.Color.R - DRESSROSA_TARGET.R)^2 +
+                             (part.Color.G - DRESSROSA_TARGET.G)^2 +
+                             (part.Color.B - DRESSROSA_TARGET.B)^2
+                if diff <= COLOR_TOLERANCE^2 then
+                    part.Color = DRESSROSA_NEW
+                end
+            end
+        end)
+    end
+end
+
+recolorDressrosa()
+
+local dressrosa = Workspace:FindFirstChild("Map")
+if dressrosa then dressrosa = dressrosa:FindFirstChild("Dressrosa") end
+if dressrosa then
+    dressrosa.DescendantAdded:Connect(function(child)
+        pcall(function()
+            if child:IsA("BasePart") then
+                local diff = (child.Color.R - DRESSROSA_TARGET.R)^2 +
+                             (child.Color.G - DRESSROSA_TARGET.G)^2 +
+                             (child.Color.B - DRESSROSA_TARGET.B)^2
+                if diff <= COLOR_TOLERANCE^2 then
+                    child.Color = DRESSROSA_NEW
+                end
+            end
+        end)
+    end)
+end
+
+spawn(function()
+    while true do
+        task.wait(2)
+        recolorDressrosa()
+    end
+end)
+
+-- =====================================================================
+-- PART 6: CreationC* CLEANUP (no deletion, only transparency)
+-- =====================================================================
+local TRANSPARENCY = 0.75
+local TARGET_COLORS = {
+    Color3.new(214/255, 109/255, 39/255),
+    Color3.new(22/255, 5/255, 7/255)
+}
+local COLOR_TOLERANCE_CREATION = 0.05
+
+-- Instead of deleting, we'll make these parts fully transparent.
+local function shouldBeFullyTransparent(part)
+    return part.Name == "CubeAura" or part.Name == "AreaHitImpact"
+end
+
+local function isColorMatched(part)
+    if not part:IsA("BasePart") then return false end
+    local partColor = part.Color
+    for _, targetColor in ipairs(TARGET_COLORS) do
+        local diff = (partColor.R - targetColor.R)^2 + (partColor.G - targetColor.G)^2 + (partColor.B - targetColor.B)^2
+        if diff <= COLOR_TOLERANCE_CREATION^2 then
+            return true
+        end
+    end
+    return false
+end
+
+local function processObject(obj)
+    if not obj then return end
+    for _, child in ipairs(obj:GetDescendants()) do
+        if child:IsA("BasePart") then
+            if shouldBeFullyTransparent(child) then
+                child.Transparency = 1
+            elseif isColorMatched(child) then
+                child.Transparency = 1
+            else
+                child.Transparency = TRANSPARENCY
+            end
+        end
+    end
+    if obj:IsA("BasePart") then
+        if shouldBeFullyTransparent(obj) then
+            obj.Transparency = 1
+        elseif isColorMatched(obj) then
+            obj.Transparency = 1
+        else
+            obj.Transparency = TRANSPARENCY
+        end
+    end
+end
+
+local function enforceCreationC()
+    local worldOrigin = Workspace:FindFirstChild("_WorldOrigin")
+    if not worldOrigin then return end
+    for _, child in ipairs(worldOrigin:GetChildren()) do
+        if child.Name:find("^CreationC") then
+            processObject(child)
+        end
+    end
+end
+
+enforceCreationC()
+
+local worldOrigin = Workspace:FindFirstChild("_WorldOrigin")
+if worldOrigin then
+    worldOrigin.ChildAdded:Connect(function(child)
+        if child.Name:find("^CreationC") then
+            processObject(child)
+        end
+    end)
+
+    local function monitorCreationC(obj)
+        if obj and obj.Name:find("^CreationC") then
+            obj.DescendantAdded:Connect(function(desc)
+                if desc:IsA("BasePart") then
+                    if shouldBeFullyTransparent(desc) then
+                        desc.Transparency = 1
+                    elseif isColorMatched(desc) then
+                        desc.Transparency = 1
+                    else
+                        desc.Transparency = TRANSPARENCY
+                    end
+                end
+            end)
+        end
+    end
+
+    for _, child in ipairs(worldOrigin:GetChildren()) do
+        if child.Name:find("^CreationC") then
+            monitorCreationC(child)
+        end
+    end
+
+    worldOrigin.ChildAdded:Connect(function(child)
+        if child.Name:find("^CreationC") then
+            monitorCreationC(child)
+        end
+    end)
+end
+
+spawn(function()
+    while true do
+        task.wait(0.1)
+        enforceCreationC()
+    end
+end)
+
+-- =====================================================================
+-- STATUS
+-- =====================================================================
+print("✅ ULTIMATE OPTIMIZED SCRIPT (CreationC uses transparency, not deletion)")
+print("   • Bloom/Atmosphere removed")
+print("   • Trails, ProjectileModel, CreationC* particles kept")
+print("   • All other particles hidden")
+print("   • Decals half‑transparent, materials Plastic")
+print("   • Dressrosa: parts with (80,220,99) → dark green (0,100,0)")
+print("   • CreationC*: CubeAura/AreaHitImpact now fully transparent (not deleted)")
+print("   • Lighting enforced every frame, other checks every 2s")
