@@ -1,6 +1,5 @@
 -- VELOCITY LOCK (Triggered by specific moves: Diamond M1 & Ghoul Grab) – ROG ON TOP
--- Tap ⚡ button to open GUI, tap LOCK: OFF to enable.
--- Drag the title bar to move the GUI (touch + mouse).
+-- Tap ⚡ to open/close GUI, drag ⚡ to reposition it.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -42,6 +41,7 @@ toggleButton.Text = "⚡"
 toggleButton.TextColor3 = Color3.new(1, 1, 1)
 toggleButton.Font = Enum.Font.GothamBold
 toggleButton.TextSize = 28
+toggleButton.Active = true
 toggleButton.Parent = screenGui
 Instance.new("UICorner", toggleButton).CornerRadius = UDim.new(0.5, 0)
 
@@ -116,6 +116,7 @@ debugLabel.Parent = mainFrame
 
 -- ===== TOGGLE MAIN GUI VISIBILITY =====
 local guiVisible = false
+local buttonTap = false  -- used to distinguish tap from drag
 
 local function toggleGUI()
     guiVisible = not guiVisible
@@ -124,66 +125,125 @@ local function toggleGUI()
     toggleButton.BackgroundColor3 = guiVisible and Color3.fromRGB(180, 60, 60) or Color3.fromRGB(60, 180, 60)
 end
 
-toggleButton.Activated:Connect(toggleGUI)
+-- ===== DRAGGING FOR FLOATING BUTTON =====
+local buttonDragging = false
+local buttonDragStart = nil
+local buttonStartPos = nil
 
--- ===== DRAGGING (MOBILE + PC) =====
-local dragging = false
-local dragStart = nil
-local startPos = nil
-
-local function startDrag(input)
-    dragging = true
-    dragStart = input.Position
-    startPos = mainFrame.Position
+local function startButtonDrag(input)
+    buttonDragging = true
+    buttonDragStart = input.Position
+    buttonStartPos = toggleButton.Position
+    buttonTap = true
 end
 
-local function endDrag()
-    dragging = false
-    dragStart = nil
-    startPos = nil
+local function endButtonDrag()
+    buttonDragging = false
+    buttonDragStart = nil
+    buttonStartPos = nil
+    -- If it was a tap (not a drag) we toggle GUI later in the InputEnded handler
 end
 
-local function updateDrag(input)
-    if dragging and dragStart and startPos then
-        local delta = input.Position - dragStart
-        mainFrame.Position = UDim2.new(
-            startPos.X.Scale, startPos.X.Offset + delta.X,
-            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+local function updateButtonDrag(input)
+    if buttonDragging and buttonDragStart and buttonStartPos then
+        local delta = input.Position - buttonDragStart
+        -- If movement > 10 pixels, it's a drag, not a tap
+        if delta.Magnitude > 10 then
+            buttonTap = false
+        end
+        toggleButton.Position = UDim2.new(
+            buttonStartPos.X.Scale, buttonStartPos.X.Offset + delta.X,
+            buttonStartPos.Y.Scale, buttonStartPos.Y.Offset + delta.Y
         )
     end
 end
 
--- Start drag on title bar (mouse + touch)
-title.InputBegan:Connect(function(input)
+toggleButton.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        startDrag(input)
+        startButtonDrag(input)
     end
 end)
 
--- End drag (mouse/touch release anywhere)
-title.InputEnded:Connect(function(input)
+toggleButton.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        endDrag()
+        -- If it was a tap (no drag), toggle GUI
+        if buttonTap then
+            toggleGUI()
+        end
+        endButtonDrag()
     end
 end)
 
--- Also end drag if user releases outside title bar
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        endDrag()
-    end
-end)
-
--- Move while dragging
 UserInputService.InputChanged:Connect(function(input)
-    if dragging then
+    -- Update floating button drag
+    if buttonDragging then
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            updateDrag(input)
+            updateButtonDrag(input)
+        end
+    end
+    -- Update main frame drag (if any)
+    if mainFrameDragging then
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            updateMainFrameDrag(input)
         end
     end
 end)
 
--- ===== CORE LOGIC =====
+-- Also ensure drag ends if input is released anywhere
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if buttonDragging then
+            if buttonTap then
+                toggleGUI()
+            end
+            endButtonDrag()
+        end
+        if mainFrameDragging then
+            endMainFrameDrag()
+        end
+    end
+end)
+
+-- ===== DRAGGING FOR MAIN FRAME =====
+local mainFrameDragging = false
+local mainDragStart = nil
+local mainStartPos = nil
+
+local function startMainFrameDrag(input)
+    mainFrameDragging = true
+    mainDragStart = input.Position
+    mainStartPos = mainFrame.Position
+end
+
+local function endMainFrameDrag()
+    mainFrameDragging = false
+    mainDragStart = nil
+    mainStartPos = nil
+end
+
+local function updateMainFrameDrag(input)
+    if mainFrameDragging and mainDragStart and mainStartPos then
+        local delta = input.Position - mainDragStart
+        mainFrame.Position = UDim2.new(
+            mainStartPos.X.Scale, mainStartPos.X.Offset + delta.X,
+            mainStartPos.Y.Scale, mainStartPos.Y.Offset + delta.Y
+        )
+    end
+end
+
+title.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        startMainFrameDrag(input)
+    end
+end)
+
+title.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        endMainFrameDrag()
+    end
+end)
+
+-- ===== CORE LOGIC (unchanged) =====
 local function resetLock()
     lockTimer = 0
     lockedVelocity = Vector3.zero
@@ -278,7 +338,6 @@ local function toggleLock()
     end
 end
 
--- Use Activated for both mouse and touch
 toggleBtn.Activated:Connect(toggleLock)
 
 -- ===== KEYBIND (PC) =====
@@ -292,4 +351,4 @@ end)
 -- ===== RESPAWN =====
 player.CharacterAdded:Connect(function() end)
 
-print("⚡ ROG ON TOP loaded. Tap ⚡ to open GUI, then tap LOCK: OFF to enable.")
+print("⚡ ROG ON TOP loaded. Tap ⚡ to open GUI, drag it to move.")
