@@ -1,6 +1,6 @@
--- VELOCITY LOCK (Triggered by specific moves: Diamond M1 & Ghoul Grab) – MOBILE SUPPORT
--- Press K to toggle (PC) or tap the GUI button (PC/Mobile).
--- When ON, using Diamond M1 or Ghoul Grab will lock your velocity for 0.4s.
+-- VELOCITY LOCK (Triggered by specific moves: Diamond M1 & Ghoul Grab) – ROG ON TOP
+-- Tap ⚡ button to open GUI, tap LOCK: OFF to enable.
+-- Drag the title bar to move the GUI (touch + mouse).
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -9,8 +9,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 
 -- ===== CONFIG =====
-local LOCK_DURATION = 0.4       -- seconds to keep velocity locked
-local MIN_SPEED = 2             -- minimum speed to lock
+local LOCK_DURATION = 0.4
+local MIN_SPEED = 2
 local enabled = false
 local lockedVelocity = Vector3.zero
 local lockTimer = 0
@@ -19,128 +19,167 @@ local connection = nil
 -- ===== FIND THE BINDABLE EVENT =====
 local bindableEvent = ReplicatedStorage:FindFirstChild("Effect") and ReplicatedStorage.Effect:FindFirstChild("Bindable")
 if not bindableEvent then
-    warn("Could not find ReplicatedStorage.Effect.Bindable! Trying to wait...")
     bindableEvent = ReplicatedStorage:WaitForChild("Effect"):WaitForChild("Bindable", 5)
     if not bindableEvent then
-        warn("Still couldn't find BindableEvent! Script will not work.")
+        warn("BindableEvent not found!")
     else
         print("Found BindableEvent!")
     end
 end
 
--- ===== GUI (Mobile-Friendly) =====
+-- ===== GUI =====
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "VelocityLockGUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 260, 0, 160)  -- slightly larger
-frame.Position = UDim2.new(0.5, -130, 0.3, 0)
-frame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-frame.BackgroundTransparency = 0.9
-frame.BorderSizePixel = 0
-frame.Active = true
-frame.Parent = screenGui
-Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
+-- === FLOATING TOGGLE BUTTON ===
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 50, 0, 50)
+toggleButton.Position = UDim2.new(0.9, -25, 0.1, 0)
+toggleButton.BackgroundColor3 = Color3.fromRGB(60, 180, 60)
+toggleButton.Text = "⚡"
+toggleButton.TextColor3 = Color3.new(1, 1, 1)
+toggleButton.Font = Enum.Font.GothamBold
+toggleButton.TextSize = 28
+toggleButton.Parent = screenGui
+Instance.new("UICorner", toggleButton).CornerRadius = UDim.new(0.5, 0)
 
+-- === MAIN GUI ===
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 200, 0, 130)
+mainFrame.Position = UDim2.new(0.5, -100, 0.3, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+mainFrame.BackgroundTransparency = 0.9
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Visible = false
+mainFrame.Parent = screenGui
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
+
+-- Title / drag handle
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 30)
+title.Size = UDim2.new(1, 0, 0, 28)
 title.BackgroundTransparency = 1
 title.Text = "ROG ON TOP"
-title.TextColor3 = Color3.fromRGB(100, 200, 255)
+title.TextColor3 = Color3.fromRGB(255, 200, 100)
 title.Font = Enum.Font.GothamBold
-title.TextSize = 18
-title.Parent = frame
+title.TextSize = 16
+title.Active = true
+title.Parent = mainFrame
 
+-- Toggle ON/OFF button inside main GUI
 local toggleBtn = Instance.new("TextButton")
-toggleBtn.Size = UDim2.new(0.8, 0, 0, 40)   -- taller button
-toggleBtn.Position = UDim2.new(0.1, 0, 0, 40)
+toggleBtn.Size = UDim2.new(0.6, 0, 0, 30)
+toggleBtn.Position = UDim2.new(0.2, 0, 0, 35)
 toggleBtn.BackgroundColor3 = Color3.fromRGB(60, 180, 60)
 toggleBtn.Text = "LOCK: OFF"
 toggleBtn.TextColor3 = Color3.new(1, 1, 1)
 toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.TextSize = 18   -- bigger text
-toggleBtn.Parent = frame
-Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
+toggleBtn.TextSize = 14
+toggleBtn.Active = true
+toggleBtn.Parent = mainFrame
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
 
+-- Status label
 local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(1, 0, 0, 22)
-statusLabel.Position = UDim2.new(0, 0, 0, 90)
+statusLabel.Size = UDim2.new(1, 0, 0, 18)
+statusLabel.Position = UDim2.new(0, 0, 0, 72)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Text = "Status: Idle"
 statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
 statusLabel.Font = Enum.Font.Gotham
-statusLabel.TextSize = 14
-statusLabel.Parent = frame
+statusLabel.TextSize = 12
+statusLabel.Parent = mainFrame
 
+-- Ability label
 local abilityLabel = Instance.new("TextLabel")
-abilityLabel.Size = UDim2.new(1, 0, 0, 18)
-abilityLabel.Position = UDim2.new(0, 0, 0, 115)
+abilityLabel.Size = UDim2.new(1, 0, 0, 16)
+abilityLabel.Position = UDim2.new(0, 0, 0, 92)
 abilityLabel.BackgroundTransparency = 1
-abilityLabel.Text = "Listening: Diamond M1 | Ghoul Grab"
+abilityLabel.Text = "Diamond M1 | Ghoul Grab"
 abilityLabel.TextColor3 = Color3.fromRGB(150, 150, 180)
 abilityLabel.Font = Enum.Font.Gotham
-abilityLabel.TextSize = 11
-abilityLabel.Parent = frame
+abilityLabel.TextSize = 10
+abilityLabel.Parent = mainFrame
 
+-- Debug label
 local debugLabel = Instance.new("TextLabel")
-debugLabel.Size = UDim2.new(1, 0, 0, 18)
-debugLabel.Position = UDim2.new(0, 0, 0, 138)
+debugLabel.Size = UDim2.new(1, 0, 0, 14)
+debugLabel.Position = UDim2.new(0, 0, 0, 112)
 debugLabel.BackgroundTransparency = 1
 debugLabel.Text = ""
 debugLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
 debugLabel.Font = Enum.Font.Gotham
-debugLabel.TextSize = 10
-debugLabel.Parent = frame
+debugLabel.TextSize = 9
+debugLabel.Parent = mainFrame
+
+-- ===== TOGGLE MAIN GUI VISIBILITY =====
+local guiVisible = false
+
+local function toggleGUI()
+    guiVisible = not guiVisible
+    mainFrame.Visible = guiVisible
+    toggleButton.Text = guiVisible and "✕" or "⚡"
+    toggleButton.BackgroundColor3 = guiVisible and Color3.fromRGB(180, 60, 60) or Color3.fromRGB(60, 180, 60)
+end
+
+toggleButton.Activated:Connect(toggleGUI)
 
 -- ===== DRAGGING (MOBILE + PC) =====
 local dragging = false
-local dragStart, startPos, dragInput
+local dragStart = nil
+local startPos = nil
 
--- For Mouse drag (PC)
-frame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        startPos = frame.Position
+local function startDrag(input)
+    dragging = true
+    dragStart = input.Position
+    startPos = mainFrame.Position
+end
+
+local function endDrag()
+    dragging = false
+    dragStart = nil
+    startPos = nil
+end
+
+local function updateDrag(input)
+    if dragging and dragStart and startPos then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+end
+
+-- Start drag on title bar (mouse + touch)
+title.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        startDrag(input)
     end
 end)
 
--- For Touch drag (Mobile)
-frame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = frame.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
+-- End drag (mouse/touch release anywhere)
+title.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        endDrag()
     end
 end)
 
--- Update drag position
+-- Also end drag if user releases outside title bar
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        endDrag()
+    end
+end)
+
+-- Move while dragging
 UserInputService.InputChanged:Connect(function(input)
     if dragging then
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            local delta = input.Position - dragStart
-            frame.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y
-            )
+            updateDrag(input)
         end
-    end
-end)
-
--- Also handle drag end for touch
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch then
-        dragging = false
-    end
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = false
     end
 end)
 
@@ -154,10 +193,9 @@ end
 
 local function triggerLock(abilityName)
     task.wait(0.05)
-
     local char = player.Character
     if not char then
-        debugLabel.Text = "No character"
+        debugLabel.Text = "No char"
         return
     end
     local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -165,61 +203,40 @@ local function triggerLock(abilityName)
         debugLabel.Text = "No HRP"
         return
     end
-
     local currentVel = hrp.AssemblyLinearVelocity
     if currentVel.Magnitude > MIN_SPEED then
         lockedVelocity = currentVel
         lockTimer = LOCK_DURATION
-        statusLabel.Text = "Locked (" .. abilityName .. "): " .. string.format("%.0f", lockedVelocity.Magnitude) .. " studs/s"
+        statusLabel.Text = "Locked: " .. string.format("%.0f", lockedVelocity.Magnitude) .. " studs/s"
         statusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
-        debugLabel.Text = "TRIGGERED: " .. abilityName
-        print("Velocity locked from", abilityName, "at", lockedVelocity.Magnitude, "for", LOCK_DURATION, "s")
+        debugLabel.Text = abilityName
+        print("Velocity locked from", abilityName, "at", lockedVelocity.Magnitude)
     else
-        debugLabel.Text = "Speed too low: " .. string.format("%.1f", currentVel.Magnitude)
+        debugLabel.Text = "Speed low: " .. string.format("%.1f", currentVel.Magnitude)
     end
 end
 
--- ===== EVENT LISTENER =====
 local function listenForAbility()
-    if not bindableEvent then
-        warn("BindableEvent not found!")
-        return
-    end
-
+    if not bindableEvent then return end
     bindableEvent.Event:Connect(function(eventType, container, data, metadata)
-        if not enabled then
-            return
-        end
-
-        if eventType ~= "spawn" then
-            return
-        end
-        if not container then
-            return
-        end
-
+        if not enabled then return end
+        if eventType ~= "spawn" or not container then return end
         local abilityName = container.Name
         local parent = container.Parent
         if parent and parent.Name ~= "Container" and parent.Name ~= "Effect" then
             abilityName = parent.Name .. "." .. abilityName
         end
-
         if abilityName == "DiamondRework.M1" or abilityName == "Ghoul.Grab" then
-            print("MATCHED! Triggering lock for:", abilityName)
-            task.spawn(function()
-                triggerLock(abilityName)
-            end)
+            task.spawn(function() triggerLock(abilityName) end)
         end
     end)
 end
 
--- ===== LOOP FOR APPLYING LOCK =====
 local function onLoop()
     local char = player.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-
     if lockTimer > 0 then
         hrp.AssemblyLinearVelocity = lockedVelocity
         hrp.AssemblyAngularVelocity = Vector3.zero
@@ -244,7 +261,7 @@ local function stopLoop()
     resetLock()
 end
 
--- ===== TOGGLE (works for both PC and mobile) =====
+-- ===== TOGGLE LOCK =====
 local function toggleLock()
     enabled = not enabled
     toggleBtn.Text = enabled and "LOCK: ON" or "LOCK: OFF"
@@ -254,22 +271,17 @@ local function toggleLock()
         if bindableEvent then
             listenForAbility()
         else
-            warn("No BindableEvent available!")
+            warn("No BindableEvent!")
         end
     else
         stopLoop()
     end
 end
 
--- Connect the toggle button (works on both mouse and touch)
-toggleBtn.MouseButton1Click:Connect(toggleLock)
--- Also connect TouchEnded for extra reliability on mobile
-toggleBtn.TouchEnded:Connect(function()
-    -- Avoid double-toggling if MouseButton1Click fires as well
-    -- We'll just rely on MouseButton1Click which works on mobile
-end)
+-- Use Activated for both mouse and touch
+toggleBtn.Activated:Connect(toggleLock)
 
--- ===== KEYBIND (PC only) =====
+-- ===== KEYBIND (PC) =====
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
     if input.KeyCode == Enum.KeyCode.K then
@@ -278,11 +290,6 @@ UserInputService.InputBegan:Connect(function(input, gp)
 end)
 
 -- ===== RESPAWN =====
-player.CharacterAdded:Connect(function()
-    if enabled then
-        -- Just let the loop continue; it will find the new character
-    end
-end)
+player.CharacterAdded:Connect(function() end)
 
-print("⚡ Move Lock loaded. Press K to toggle (PC) or tap the GUI button.")
-print("   Listens for: DiamondRework.M1 | Ghoul.Grab")
+print("⚡ ROG ON TOP loaded. Tap ⚡ to open GUI, then tap LOCK: OFF to enable.")
