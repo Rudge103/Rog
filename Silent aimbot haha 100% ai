@@ -24,7 +24,7 @@ aimLine.Transparency = 0.6
 -- ===== CONFIGURATION =====
 if not getgenv().setting then
     getgenv().setting = {
-        Fov = 150,
+        Fov = 115,
         Color = Color3.fromRGB(255, 0, 0),
     }
 end
