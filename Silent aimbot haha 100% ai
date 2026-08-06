@@ -313,10 +313,10 @@ UserInputService.InputEnded:Connect(function(input, gp)
         lockedPlayerName = nil
         lockedNPCPart = nil
         -- Press Z key (down then up)
-        VirtualInput:SendKeyEvent(true, Enum.KeyCode.Z, false, nil)
+        VirtualInput:SendKeyEvent(true, Enum.KeyCode.X, false, nil)
         task.wait(0.05)
-        VirtualInput:SendKeyEvent(false, Enum.KeyCode.Z, false, nil)
-        print("Pressed Z on release of G")
+        VirtualInput:SendKeyEvent(false, Enum.KeyCode.X, false, nil)
+        print("Pressed X on release of G")
     end
 end)
 
